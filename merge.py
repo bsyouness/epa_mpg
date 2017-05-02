@@ -13,8 +13,9 @@ def get_original():
 	vin_original.columns = [pattern.search(x).groups()[0] 
 		if pattern.search(x) else x for x in vin_original.columns]
 
+	# Define integer id based on error code from VIN database. 
 	vin_original['error_id'] = vin_original.ErrorCode.apply(
-		lambda x: int(re.match('([0-9]+).*', x).groups()[0]))
+		lambda x: re.match('([0-9]+).*', x).groups()[0])
 
 	# Define columns on which the merge will be performed.
 	epa_cols = [
@@ -46,7 +47,7 @@ def get_original():
 		'BodyClass', 'DisplacementL', 'EngineCylinders', 'Trim', 'Model', 'FuelTypeSecondary', 
 		'ErrorCode', 'VehicleType', 'Manufacturer', 'DriveType', 'TransmissionStyle', 'TransmissionSpeeds'
 	"""
-	vin_keep_cols = ['VIN', 'VehicleType', 'error_id'] + vin_cols 
+	vin_keep_cols = ['VIN', 'VehicleType', 'BodyClass', 'error_id'] + vin_cols 
 	vin_original.drop([x for x in vin_original.columns if x not in vin_keep_cols], axis=1, inplace=True)
 	epa_keep_cols = ['trany', 'city08', 'city08U', 'comb08', 'comb08U', 'highway08', 'highway08U'] + epa_cols
 	epa_original.drop([x for x in epa_original.columns if x not in epa_keep_cols], axis=1, inplace=True)
@@ -57,20 +58,21 @@ def get_original():
 	# Get rid of rows where certain info is missing.
 	essential_cols = 'make, model, year'.split(', ')
 	for col in essential_cols:
-		vin_original = vin_original.loc[[not(x) for x in vin_original[col].isnull()]]
+		vin_original = vin_original.loc[~vin_original[col].isnull()]
 
 	# Replace missing values (nan) with u'-1'.
 	vin_original, epa_original = [
 		df.apply(lambda x: pd.Series.fillna(x, u'-1')) for df in (vin_original, epa_original)]
 
-	# Make everything lower case and tr im white spaces.
+	# Make everything lower case and trim white spaces.
 	vin_original, epa_original = [
 		df.applymap(lambda s: s.lower().strip()) for df in (vin_original, epa_original)]
 
 	# Get rid of undesirable vehicles.
-	filter_out_strs = ['incomplete vehicle', 'trailer', motorcycle, bus, low speed vehicle (lsv)']
-	vin_original = vin_original.loc[vin_original['VehicleType'].astype('str').apply(
-		lambda x: reduce(operator.and_, [re.search(s, x) == None for s in filter_out_strs]))]
+	filter_out_strs = ['incomplete vehicle', 'trailer', 'motorcycle', 'bus', 'low speed vehicle (lsv)']
+	vin_original = vin_original.loc[~vin_original['VehicleType'].isin(filter_out_strs)]
+	vin_original = vin_original.loc[~vin_original['BodyClass'].str.contains('incomplete')]
+	# Equivalent to: vin_original.loc[[not(x in filter_out_strs) for x in vin_original['VehicleType']]]
 
 	# Get rid of tranmission type in model for epa_original data. 
 	epa_original['model'] = epa_original['model'].apply(
