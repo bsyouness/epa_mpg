@@ -51,7 +51,7 @@ def get_original():
 	"""
 	vin_keep_cols = ['VIN', 'VehicleType', 'BodyClass', 'error_id', 'Series'] + vin_cols 
 	vin_original.drop([x for x in vin_original.columns if x not in vin_keep_cols], axis=1, inplace=True)
-	epa_keep_cols = ['trany', 'city08', 'city08U', 'comb08', 'comb08U', 'highway08', 'highway08U'] + epa_cols
+	epa_keep_cols = ['trany', 'city08', 'city08U', 'comb08', 'comb08U', 'highway08', 'highway08U', 'VClass',] + epa_cols
 	epa_original.drop([x for x in epa_original.columns if x not in epa_keep_cols], axis=1, inplace=True)
 
 	# Rename the VIN dataframe columns to be the same as the EPA dataframe columns.
@@ -102,6 +102,31 @@ def get_original():
 		return _del_duplicate_in_str(s)	
 	vin_original = vin_original.applymap(del_duplicate_in_str)
 
+	# Modify makes. 
+	drop_makes = \
+		'''volvo truck
+		western star
+		whitegmc
+		winnebago
+		winnebago industries, inc.
+		workhorse
+		ai-springfield
+		autocar industries
+		capacity of texas
+		caterpillar
+		e-one
+		freightliner
+		kenworth
+		mack
+		navistar
+		peterbilt
+		pierce manufacturing
+		spartan motors chassis
+		terex advance mixer
+		the vehicle production group
+		utilimaster motor corporation'''.split('\n\t')
+	vin_original = vin_original.loc[~vin_original.make.isin(drop_makes)]
+
 	## Add IDs
 	vin_original['VIN_ID'] = range(1, len(vin_original) + 1)
 	epa_original['EPA_ID'] = range(1, len(epa_original) + 1)
@@ -136,7 +161,7 @@ epa_original, vin_original = get_original()
 # Export. 
 # vin_original.to_csv('vin_data_processed.csv', encoding='utf8')
 
-def modify_df(vin, epa):
+def modify(vin, epa):
 	# Change the namings of certain fields. 
 	## Define mapping.
 	mapping = {
@@ -240,6 +265,9 @@ def modify_df(vin, epa):
 	epa[mpg_list] = epa[mpg_list].astype(float)
 
 	# Modify makes and model names. 
+	## Ram.
+	vin.ix[(vin.make == 'ram'), 'make'] = 'dodge'
+	epa.ix[(epa.make == 'ram'), 'make'] = 'dodge'
 	## Ford. 
 	epa.ix[(epa.make == 'ford') & (epa.model == 'escort zx2'), 'model_mod'] = 'zx2'
 	## Chevrolet.
@@ -258,6 +286,7 @@ def modify_df(vin, epa):
 	vin.ix[vin.make == 'scion', 'model_mod'] = \
 		vin.ix[vin.make == 'scion', 'model_mod'].apply(lambda x: x.split(' ')[1])
 	epa.ix[epa.model == 'camry solara', 'model_mod'] = 'solara'
+	vin.ix[vin.model == '4-runner', 'model_mod'] = '4runner'
 	## Mazda.
 	def delete_mazda(s):
 		match = re.match('mazda(.*)', s)
@@ -271,9 +300,6 @@ def modify_df(vin, epa):
 	pattern = re.compile('john cooper works(.*)')
 	epa['model_mod'] = epa['model_mod'].apply(
 		lambda x: 'jcw'+pattern.match(x).groups()[0] if(pattern.match(x)) else x)
-	## Keep only first word of the model. 
-	for df in (epa, vin):
-		df['model_mod'] = df['model_mod'].apply(lambda x: x.strip().split(' ')[0])
 	## Apply pattern modifications. 
 	pattern_list = [
 		re.compile('(.*) [0-9]\.[0-9]$'), 	# Drop the second part if it's like 'model 3.2'
@@ -282,13 +308,13 @@ def modify_df(vin, epa):
 		epa['model_mod'] = epa['model_mod'].apply(
 			lambda x: pattern.match(x).groups()[0] if(pattern.match(x)) else x)
 	## Get rid of spaces and dashes. 
-	def try_no_sep(s):
-		try:
-			return s.replace(' ', '').replace('-', '')
-		except:
-			return s
-	for df in (epa, vin):
-		df['model_mod'] = df['model_mod'].apply(try_no_sep)
+	# def try_no_sep(s):
+	# 	try:
+	# 		return s.replace(' ', '').replace('-', '')
+	# 	except:
+	# 		return s
+	# for df in (epa, vin):
+	# 	df['model_mod'] = df['model_mod'].apply(try_no_sep)
 	## Chevrolet.
 	### Replace '^[c, k][0-9]' with 'c' or 'k'. 
 	epa.ix[(epa.make == 'chevrolet') & (epa.model_mod.str.contains('^[c, k][0-9]')), 'model_mod'] = \
@@ -300,9 +326,15 @@ def modify_df(vin, epa):
 	### Blazer models. 
 	epa.ix[(epa.make == 'chevrolet') & (epa.model_mod.str.contains('s10|t10')), 'model_mod'] = 'blazer'
 	vin.ix[(vin.make == 'chevrolet') & (vin.model_mod.str.contains('s10|t10')), 'model_mod'] = 'blazer'
+	### Suburban models. 
+	epa.ix[(epa.make == 'chevrolet') & (epa.model_mod.str.contains('v10|r10|k10')), 'model_mod'] = 'suburban'
+	vin.ix[(vin.make == 'chevrolet') & (vin.model_mod.str.contains('v10|r10|k10')), 'model_mod'] = 'suburban'
 	### Replace gmt-400 with c when drive_mod = 2 and with k otherwise. 
-	vin.ix[(vin.make == 'chevrolet') & (vin.model_mod == 'gmt400') & (vin.drive_mod == 'two'), 'model_mod'] = 'c'
-	vin.ix[(vin.make == 'chevrolet') & (vin.model_mod == 'gmt400') & (vin.drive_mod == 'all'), 'model_mod'] = 'k'
+	vin.ix[(vin.make == 'chevrolet') & (vin.model_mod == 'gmt-400') & (vin.drive_mod == 'two'), 'model_mod'] = 'c'
+	vin.ix[(vin.make == 'chevrolet') & (vin.model_mod == 'gmt-400') & (vin.drive_mod == 'all'), 'model_mod'] = 'k'
+	## Keep only first word of the model. 
+	for df in (epa, vin):
+		df['model_mod'] = df['model_mod'].apply(lambda x: x.strip().split(' ')[0].split('-')[0])
 	## Saturn.
 	### Replace '^(\w+?)[0-9]+' with `groups()[0]`. 
 	vin.ix[(vin.make == 'saturn') & (vin.model_mod.str.contains('^(\w+?)[0-9]+')), 'model_mod'] = \
@@ -324,6 +356,24 @@ def modify_df(vin, epa):
 	epa = epa.reset_index(drop=True)
 
 	return vin, epa
+
+# Create a copy of the VIN and EPA databases.
+epa = epa_original.copy()
+vin = vin_original.copy()
+
+# Merge the VIN db with the ERG db.
+erg = pd.read_csv('X:\EPA_MPG\ERG_output.csv', header=None, dtype=unicode)
+erg.columns = ['VIN', 'counts']
+erg = erg[erg['counts'] != '.']
+erg['counts'] = erg['counts'].astype(int)
+erg = erg.loc[erg['counts'] > 10]
+erg['VIN'] = erg['VIN'].apply(str.lower)
+vin = pd.merge(vin, erg, how='inner')
+# Export.
+# vin.sort_values(['error_id', 'counts']).to_csv('errors.csv', encoding='utf8')
+
+# Modify info in VIN and EPA db that might be less obvious...
+vin, epa = modify(vin, epa)
 
 def merge(vin, epa):
 	# Perform the merge.
@@ -357,33 +407,16 @@ def merge(vin, epa):
 		'',
 		]
 
-	matched_vins = pd.DataFrame(columns=vin.columns)
+	matched_vins = pd.DataFrame(columns=list(vin.columns) + ['matched_on'])
 
 	for _ in range(7):
 		on_cols = on_cols[:-1]
 		remaining_vins = vin.loc[~vin.VIN_ID.isin(matched_vins.VIN_ID)]
 		inner_join = pd.merge(remaining_vins.reset_index(), epa, how='inner', on=on_cols).set_index('index')
+		inner_join['matched_on'] = len(on_cols)
 		matched_vins = pd.concat([inner_join, matched_vins])
 
 	return matched_vins
-
-# Create a copy of the VIN and EPA databases.
-epa = epa_original.copy()
-vin = vin_original.copy()
-
-# Merge the VIN db with the ERG db.
-erg = pd.read_csv('X:\EPA_MPG\ERG_output.csv', header=None, dtype=unicode)
-erg.columns = ['VIN', 'counts']
-erg = erg[erg['counts'] != '.']
-erg['counts'] = erg['counts'].astype(int)
-erg = erg.loc[erg['counts'] > 10]
-erg['VIN'] = erg['VIN'].apply(str.lower)
-vin = pd.merge(vin, erg, how='inner')
-# Export.
-# vin.sort_values(['error_id', 'counts']).to_csv('errors.csv', encoding='utf8')
-
-# Modify info in VIN and EPA db that might be less obvious...
-vin, epa = modify_df(vin, epa)
 
 # Merge VIN and EPA db. 
 matched_vins = merge(vin, epa)
@@ -403,10 +436,11 @@ matched_vins_no_dupes = matched_vins_simple.drop_duplicates(subset='VIN')
 vins_no_dupes = vin.drop_duplicates(subset='VIN')
 print('Merge fraction weighted: {:.2%}'.format(float(matched_vins_no_dupes['counts'].sum())/vins_no_dupes['counts'].sum()))
 
+matched_vins_simple.to_csv('matched_vins.csv', encoding = 'utf8')
 # Duplicates characterization.
 ## Create the ranges of values for each VIN. 
 matched_vins_ranges = matched_vins_simple.groupby('VIN')
-matched_vins_ranges['highway08', 'comb08', 'city08'].describe(percentiles=[]).unstack().reset_index()
+matched_vins_ranges['highway08', 'comb08', 'city08'].describe(percentiles=[]).unstack().reset_index().to_csv('duplicate_ranges.csv')
 ## Max number of duplicates:
 max(map(len, matched_vins_ranges.groups.values()))
 
@@ -445,7 +479,7 @@ def clear_use_range(wb, sheet_name):
 	used_range_rows = (active_sheet.api.UsedRange.Row, 
 		active_sheet.api.UsedRange.Row + active_sheet.api.UsedRange.Rows.Count)
 	used_range_cols = (active_sheet.api.UsedRange.Column, 
-		active_sh eet.api.UsedRange.Column + active_sheet.api.UsedRange.Columns.Count)
+		active_sheet.api.UsedRange.Column + active_sheet.api.UsedRange.Columns.Count)
 	used_range = xw.Range(*zip(used_range_rows, used_range_cols))
 	used_range.clear()
 
@@ -454,6 +488,20 @@ clear_use_range(out_wb, 'not_matched')
 out_wb.sheets('not_matched').range(1, 1).value = not_matched_out
 clear_use_range(out_wb, 'vin_only')
 out_wb.sheets('vin_only').range(1, 1).value = not_matched_vins
+
+
+
+vin.loc[vin.VIN == 'yv1ax472xe2242024'][['make', 'model', 'year', 'fuelType1']]
+matched_vins_simple
+matched_vins_simple.loc[matched_vins_simple.VIN == 'yv1ax472xe2242024']
+epa.loc[epa.EPA_ID == 18497]
+
+[['make', 'model_mod', 'year', 'fuelType1']]
+
+
+
+
+
 
 
 # Check if all VIN numbers are in matched or not_matched.
