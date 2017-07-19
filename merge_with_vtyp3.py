@@ -29,3 +29,15 @@ merged = pd.merge(vin_original, vtype_no_dupes,
 	).drop_duplicates(subset='VIN')
 
 merged.to_csv('vin_with_vtyp3.csv', encoding='utf8')
+
+# With new file. 
+new_vtype = pd.read_csv(r'X:\EPA_MPG\vtyp.csv', dtype=unicode)
+# Replace 7.099609375 with 7
+new_vtype.loc[new_vtype.VTYP == '7.099609375', 'VTYP'] = '7'
+new_vtype.columns = 'VIN, counts, vtyp3'.split(', ')
+
+merged = pd.merge(vin_original, new_vtype,
+	how='left', on='VIN'
+	).drop_duplicates(subset='VIN')
+
+merged.to_csv('vin_with_vtyp3.csv', encoding='utf8')

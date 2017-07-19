@@ -5,12 +5,27 @@ import operator
 from datetime import datetime
 from math import isnan
 import numpy as np
+import matplotlib.pyplot as plt
 
 ######################################################################################################################
-# Load databases.
+# Load databsets.
 ######################################################################################################################
-epa_original = pd.read_csv(r'X:\EPA_MPG\epa_data.csv', encoding='utf8', dtype=unicode)
-vin_original = pd.read_csv(r'X:\EPA_MPG\vin_with_vtyp3.csv', encoding='utf8', dtype=unicode)
+epa_raw = pd.read_csv(r'X:\EPA_MPG\epa_data.csv', encoding='utf8', dtype=unicode)
+vin_raw = pd.read_csv(r'X:\EPA_MPG\vin_with_vtyp3.csv', encoding='utf8', dtype=unicode)
+
+epa_original = epa_raw.copy()
+vin_original = vin_raw.copy()
+
+vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Expedition')
+	& (vin_original.DisplacementL == u'14.6'), ['DisplacementL', 'FuelTypePrimary']] = ['4.6', 'gasoline']
+
+vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Explorer') 
+	& ((vin_original.VIN.apply(lambda x: x[7]) == 'E') | (vin_original.VIN.apply(lambda x: x[7]) == 'X')), 
+	['DisplacementL', 'FuelTypePrimary']] = ['4.0', 'gasoline']
+
+vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Explorer') 
+	& (vin_original.VIN.apply(lambda x: x[7]) == 'P'), 
+	['EngineCylinders', 'DisplacementL', 'FuelTypePrimary']] = ['8', '5.0', 'gasoline']
 
 # Get rid of the 'Results_0_' string in the column titles
 # pattern = re.compile(u'Results_0_(.+)')
@@ -46,12 +61,7 @@ vin_cols = [
 	]
 
 # Get rid of undesirable columns.
-""" Previously vin_keep_cols included:
-	'ModelYear', 'Series', 'FuelTypePrimary', 'Trim2', 'Doors', 'Make', 'Series2', 
-	'BodyClass', 'DisplacementL', 'EngineCylinders', 'Trim', 'Model', 'FuelTypeSecondary', 
-	'ErrorCode', 'VehicleType', 'Manufacturer', 'DriveType', 'TransmissionStyle', 'TransmissionSpeeds'
-"""
-vin_keep_cols = ['VIN', 'VehicleType', 'BodyClass', 'error_id', 'Series', 'vtyp3'] + vin_cols 
+vin_keep_cols = ['VIN', 'VehicleType', 'BodyClass', 'error_id', 'Series', 'vtyp3', 'counts', 'Trim', 'Trim2'] + vin_cols 
 vin_original.drop([x for x in vin_original.columns if x not in vin_keep_cols], axis=1, inplace=True)
 epa_keep_cols = ['trany', 'city08', 'city08U', 'comb08', 'comb08U', 'highway08', 'highway08U', 'VClass',] + epa_cols
 epa_original.drop([x for x in epa_original.columns if x not in epa_keep_cols], axis=1, inplace=True)
@@ -73,7 +83,7 @@ vin_original, epa_original = [
 	df.applymap(lambda s: s.lower().strip()) for df in (vin_original, epa_original)]
 
 # Get rid of undesirable vehicles.
-filter_out_strs = ['incomplete vehicle', 'trailer', 'motorcycle', 'bus', 'low speed vehicle (lsv)']
+filter_out_strs = 'incomplete vehicle, trailer, motorcycle, bus, low speed vehicle (lsv)'.split(', ')
 vin_original = vin_original.loc[~vin_original['VehicleType'].isin(filter_out_strs)]
 vin_original = vin_original.loc[~vin_original['BodyClass'].str.contains('incomplete')]
 
@@ -185,11 +195,16 @@ mapping = {
 ## Modify fuel type, drive type for epa and vin, and transmission type for vin. 
 for (df, df_name) in ((epa_original, 'epa'), (vin_original, 'vin')):
 	for item in mapping[df_name]:
+		df[item + '_mod'] = df[item]
 		df[item + '_mod'] = df[item].replace(mapping[df_name][item])
 
 # Make years ints.
 epa_original.year = epa_original.year.apply(int)
 vin_original.year = vin_original.year.apply(int)
+
+# Only keep years between 1991 and 2010. 
+vin_original = vin_original.loc[(vin_original.year >= 1991) & (vin_original.year <= 2010)]
+epa_original = epa_original.loc[(epa_original.year >= 1991) & (epa_original.year <= 2010)]
 
 # Take out flexible fuel vehicles. 
 vin_original, epa_original = [df.loc[~df.fuelType1.str.contains('flexible')] 
@@ -203,10 +218,6 @@ def mod_electric_vehicles(df):
 	return df
 epa_original = mod_electric_vehicles(epa_original)
 vin_original = mod_electric_vehicles(vin_original)
-
-# Add IDs
-vin_original['VIN_ID'] = range(1, len(vin_original) + 1)
-epa_original['EPA_ID'] = range(1, len(epa_original) + 1)
 
 # Add model_mod.
 vin_original['model_mod'] = vin_original['model']
@@ -256,6 +267,10 @@ epa_expanded = pd.concat(
 vin_expanded.columns, epa_expanded.columns = vin_original.columns, epa_original.columns
 vin_original, epa_original = vin_expanded, epa_expanded
 
+# Add IDs
+vin_original['VIN_ID'] = range(1, len(vin_original) + 1)
+epa_original['EPA_ID'] = range(1, len(epa_original) + 1)
+
 # Reset index.
 vin_original = vin_original.reset_index(drop=True)
 epa_original = epa_original.reset_index(drop=True)
@@ -267,14 +282,20 @@ epa_original = epa_original.reset_index(drop=True)
 epa_1 = epa_original.copy()
 vin_1 = vin_original.copy()
 
+# Get rid of rows where certain info is missing.
+essential_cols = 'make, model, year, fuelType1, displ, cylinders'.split(', ')
+for col in essential_cols:
+	vin_1 = vin_1.loc[~vin_1[col].isnull()]
+
 # Merge the vin_1 db with the ERG db.
-erg = pd.read_csv('X:\EPA_MPG\ERG_output.csv', header=None, dtype=unicode)
-erg.columns = ['VIN', 'counts']
-erg = erg[erg['counts'] != '.']
-erg['counts'] = erg['counts'].astype(int)
-erg = erg.loc[erg['counts'] > 10]
-erg['VIN'] = erg['VIN'].apply(str.lower)
-vin_1 = pd.merge(vin_1, erg, how='inner')
+# erg = pd.read_csv('X:\EPA_MPG\ERG_output.csv', header=None, dtype=unicode)
+# erg.columns = ['VIN', 'counts']
+# erg = erg[erg['counts'] != '.']
+# erg['counts'] = erg['counts'].astype(int)
+# erg = erg.loc[erg['counts'] > 10]
+# erg['VIN'] = erg['VIN'].apply(str.lower)
+# vin_1 = pd.merge(vin_1, erg, how='inner')
+vin_1['counts'] = vin_1['counts'].astype(int)
 
 # Modify transmission information
 ## In vin_1 DB: turn transmission speeds into integers then strings.
@@ -304,10 +325,12 @@ epa_1['transmission_type_mod'] = epa_1['transmission_type'] = epa_1.trany.apply(
 
 # Round displacement in both databases.
 def convert_displacement(s):
-	try:
-		return round(float(s), 1)
-	except:
-		return None
+	if re.findall(',', s):
+		return unicode(round(float(s.split(',')[0]), 1))
+	elif s == u'-1':
+		return s
+	else:
+		return unicode(round(float(s), 1))
 for df in (epa_1, vin_1):
 	df['displ_mod'] = df['displ'].apply(convert_displacement)
 
@@ -322,6 +345,11 @@ vin_1['cylinders'] = vin_1['cylinders'].astype(unicode)
 mpg_list = 'highway08, highway08U, comb08, comb08U, city08, city08U'.split(', ')
 epa_1[mpg_list] = epa_1[mpg_list].astype(float)
 
+# Add vtyp3 for epa. 
+epa_1['vtyp3'] = u'-1'
+epa_1.loc[epa_1.VClass.str.contains('pickup') & epa_1.model.str.contains('15|10'), 'vtyp3'] = u'3'
+epa_1.loc[epa_1.VClass.str.contains('pickup') & epa_1.model.str.contains('25|35'), 'vtyp3'] = u'4'
+
 # Reset index.
 vin_1 = vin_1.reset_index(drop=True)
 epa_1 = epa_1.reset_index(drop=True)
@@ -331,6 +359,35 @@ epa_1 = epa_1.reset_index(drop=True)
 ######################################################################################################################
 epa = epa_1.copy()
 vin = vin_1.copy()
+
+# In vin.
+vin['type'] = np.nan
+vin.loc[(vin.vtyp3.str.contains(r'1|2')) | (vin.VehicleType.str.contains('car')), 'type'] = 'car'
+ton_dict = {'1/4': '15', '1/2': '15', '3/4': '25', '1': '35'}
+# In model name. 
+vin.loc[(vin.type != 'car') & (vin.model_mod.str.contains(r'(\D|^)(15|25|35)')), 'type'] = \
+	vin.model_mod.str.extract(r'(\D|^)(15|25|35)')[1]
+# In series name. 
+vin.loc[(vin.type != 'car') & (vin.Series.str.contains(r'(\D|^)(15|25|35)')), 'type'] = \
+	vin.Series.str.extract(r'(\D|^)(15|25|35)')[1]
+vin.loc[(vin.type != 'car') & (vin.Series.str.contains(r'([^\(\s]*)\ston')), 'type'] = \
+	vin.Series.str.extract(r'([^\(\s]*)\ston').replace(ton_dict)
+# In series name. 
+vin.loc[(vin.type != 'car') & (vin.Trim.str.contains(r'(\D|^)(15|25|35)')), 'type'] = \
+	vin.Trim.str.extract(r'(\D|^)(15|25|35)')[1]
+vin.loc[(vin.type != 'car') & (vin.Trim.str.contains(r'([^\(\s]*)\ston')), 'type'] = \
+	vin.Trim.str.extract(r'([^\(\s]*)\ston').replace(ton_dict)
+# Replace nans with 'car'
+vin.loc[(vin.type.isnull()) | (~vin.type.isin(['car'] + ton_dict.values())), 'type'] = 'car'
+
+# In epa.
+# In model name.
+epa['type'] = np.nan
+epa.loc[~epa.VClass.str.contains(r'pickup|sport|van'), 'type'] = 'car'
+epa.loc[(epa.type != 'car') & (epa.model.str.contains('10|15|25|35')), 'type'] = epa.model.str.extract('(10|15|25|35)').replace({'10': '15'})
+# Replace nans with 'car'
+epa.loc[epa.type.isnull(), 'type'] = 'car'
+
 # Modify makes. 
 ## Ram.
 vin.ix[(vin.make == 'ram'), 'make'] = 'dodge'
@@ -351,6 +408,8 @@ vin.ix[(vin.make == 'chrysler') & (vin.model_mod == 'caravan'), 'make'] = 'dodge
 vin.ix[(vin.make == 'sprinter (dodge or freightliner)'), 'make'] = 'dodge'
 
 # Modify models. 
+## Delete from EPA all models that contain chassis in model name. 
+epa = epa.loc[~epa.model.str.contains('chassis')]
 ## All models with displacements in the model name, e.g. '190e 2.3-16'
 def mod_models_w_displ(s):
 	pattern = re.compile(r'(.*)\d\.\d(.*)')
@@ -445,50 +504,49 @@ epa = epa.reset_index(drop=True)
 ######################################################################################################################
 # Merge databases. 
 ######################################################################################################################
-def merge():
-	# Perform the merge.
-	## Merge. 
-	mod_cols = [
-		'model',
-		'fuelType1',
-		'drive',
-		'transmission_speeds',
-		'transmission_type',
-		'displ',
-		]
-	append_to_list = lambda l, s: map(''.join, zip(l, [s] * len(l)))
-	mod_cols_mod = append_to_list(mod_cols, '_mod')
-
-	# # Clean up columns. 
-	# vin.drop([x for x in vin.columns if x not in mod_cols_mod + epa_cols + ['VIN_ID', 'VIN', 'counts']], 
-	# 	axis=1, inplace=True)
-
-	# on_cols = [x for x in epa_cols + mod_cols_mod if x not in mod_cols]
-	on_cols = [
+def merge(n_var_left=4):
+	"""
+	Args:
+		n_var_left: number of variables to keep at the top of the list for the merge (variables that won't be dropped). 
+	"""
+	global vin, epa
+	no_missing_val_cols = [
 		'make',
 		'model_mod',
 		'year',
 		'fuelType1_mod',
+		'type',
 		'drive_mod',
-		'displ_mod',
-		'cylinders',
-		'transmission_speeds_mod',
-		'transmission_type_mod',
-		'',
 		]
 
-	matched_vins = pd.DataFrame(columns=list(vin.columns) + ['matched_on'])
+	missing_val_cols = [
+		'displ_mod',
+		'cylinders',
+		]
 
-	for _ in range(7):
+	match_col_list = [missing_val_cols] + [[x] for x in missing_val_cols]
+	matched_vins = pd.DataFrame(columns=list(set(vin.columns.tolist() + epa.columns.tolist())) + ['matched_on'])
+	for col_list in match_col_list:
+		on_cols = no_missing_val_cols + col_list
+		remaining_vins = vin.loc[~vin.VIN_ID.isin(matched_vins.VIN_ID)]
+		remaining_vins = remaining_vins.loc[reduce(operator.and_, [(remaining_vins[x] != '-1') for x in on_cols])]
+		remaining_epas = epa.loc[~epa.EPA_ID.isin(matched_vins.EPA_ID)]
+		remaining_epas = remaining_epas.loc[reduce(operator.and_, [(remaining_epas[x] != '-1') for x in on_cols])]
+		inner_join = pd.merge(remaining_vins.reset_index(), remaining_epas, how='inner', on=on_cols).set_index('index')
+		inner_join['matched_on'] = len(on_cols)
+		matched_vins = pd.concat([inner_join, matched_vins])
+
+	on_cols = no_missing_val_cols
+	for _ in range(len(no_missing_val_cols) - n_var_left):
 		on_cols = on_cols[:-1]
 		remaining_vins = vin.loc[~vin.VIN_ID.isin(matched_vins.VIN_ID)]
-		inner_join = pd.merge(remaining_vins.reset_index(), epa, how='inner', on=on_cols).set_index('index')
+		remaining_epas = epa.loc[~epa.EPA_ID.isin(matched_vins.EPA_ID)]
+		inner_join = pd.merge(remaining_vins.reset_index(), remaining_epas, how='inner', on=on_cols).set_index('index')
 		inner_join['matched_on'] = len(on_cols)
 		matched_vins = pd.concat([inner_join, matched_vins])
 
 	return matched_vins
 
-# Merge VIN and EPA db. 
 matched_vins = merge()
 
 matched_vins_ids = matched_vins[['VIN_ID', 'EPA_ID', 'matched_on']]
@@ -496,24 +554,51 @@ matched_vins_ids = matched_vins[['VIN_ID', 'EPA_ID', 'matched_on']]
 vin_vin = vin.rename(columns = dict(zip(vin.columns, vin.columns + '_vin')))
 epa_epa = epa.rename(columns = dict(zip(epa.columns, epa.columns + '_epa')))
 # Matched VINs.
-matched_vins_simple_id = pd.merge(pd.merge(matched_vins_ids, vin_vin, left_on='VIN_ID', right_on='VIN_ID_vin'), 
-	epa_epa, left_on='EPA_ID', right_on='EPA_ID_epa')
-matched_vins_simple_id.drop(['EPA_ID', 'VIN_ID'], axis=1, inplace=True)
-matched_vins_no_dupes = matched_vins_simple_id.sort_values('EPA_ID_epa', ascending=False).drop_duplicates(subset='VIN_vin')
+matched_vins_simple = pd.merge(pd.merge(matched_vins_ids, vin_vin, left_on='VIN_ID', right_on='VIN_ID_vin', how='left'), 
+	epa_epa, left_on='EPA_ID', right_on='EPA_ID_epa', how='left')
+matched_vins_simple.drop(['EPA_ID', 'VIN_ID'], axis=1, inplace=True)
+matched_vins_no_dupes = matched_vins_simple.sort_values('comb08_epa', ascending=True).drop_duplicates(subset='VIN_vin')
 vins_no_dupes = vin_vin.drop_duplicates(subset='VIN_vin')
-print('Merge fraction weighted: {:.2%}'.format(float(matched_vins_no_dupes['counts_vin'].sum())/vins_no_dupes['counts_vin'].sum()))
+print('Merge fraction weighted: {:.2%}'.format(float(matched_vins_no_dupes['counts_vin'].sum())/
+	vins_no_dupes['counts_vin'].sum()))
+print('Duplication rate: {:.4}'.format(float(len(matched_vins_simple))/float(len(matched_vins_no_dupes))))
 
+######################################################################################################################
+# Testing for n_var_left. 
+######################################################################################################################
+n_range = range(6, 0, -1)
+sensitivity_to_n = pd.DataFrame(columns='duplication_rate, merge_fraction_wgt'.split(', '), index=n_range)
+
+for n in n_range:
+	n_matched_vins = merge(n)
+	n_matched_vins_simple = pd.merge(pd.merge(n_matched_vins, vin_vin, left_on='VIN_ID', 
+		right_on='VIN_ID_vin', how='left'), epa_epa, left_on='EPA_ID', right_on='EPA_ID_epa', how='left')
+	n_matched_vins_no_dupes = n_matched_vins_simple.drop_duplicates(subset='VIN_vin')
+	n_vins_no_dupes = vin.drop_duplicates(subset='VIN')
+	merge_fraction_wgt = float(n_matched_vins_no_dupes['counts_vin'].sum())/n_vins_no_dupes['counts'].sum()
+	duplication_rate = float(len(n_matched_vins))/float(len(n_matched_vins_no_dupes))
+	print('Merge fraction weighted: {:.2%}'.format(merge_fraction_wgt))
+	print('Duplication rate: {:.4}'.format(duplication_rate))
+	sensitivity_to_n.loc[n, 'duplication_rate'] = duplication_rate
+	sensitivity_to_n.loc[n, 'merge_fraction_wgt'] = merge_fraction_wgt
+
+######################################################################################################################
+# Missing cylinders or displacements. 
+######################################################################################################################
+vin.loc[(vin.displ_mod == "-1") | (vin.cylinders == "-1")].to_csv('missing_cylinders_or_displacement_2.csv')
+missing_data_VIN_ID = vin.loc[(vin.displ_mod == "-1") | (vin.cylinders == "-1"), 'VIN_ID']
+matched_vins_simple.loc[matched_vins_simple.VIN_ID_vin.isin(missing_data_VIN_ID)].to_csv('missing_data_check.csv')
 ######################################################################################################################
 # Generate output files. 
 ######################################################################################################################
-vins_matched = matched_vins_simple_id.VIN_ID_vin
-epas_matched = matched_vins_simple_id.EPA_ID_epa
+vins_matched = matched_vins_simple.VIN_ID_vin
+epas_matched = matched_vins_simple.EPA_ID_epa
 # Not matched vins.
 not_matched_vins = vin_vin.loc[~vin_vin.VIN_ID_vin.isin(vins_matched)]
 not_matched_epas = epa_epa.loc[~epa_epa.EPA_ID_epa.isin(epas_matched)]
 not_matched = pd.concat([not_matched_epas, not_matched_vins])
 # Both.
-all_records = pd.concat([not_matched, matched_vins_simple_id])
+all_records = pd.concat([not_matched, matched_vins_simple])
 all_records_no_dupes = pd.concat([not_matched, matched_vins_no_dupes])
 ordered_cols = [
 	'matched_on',
@@ -564,16 +649,13 @@ ordered_cols = [
 	'BodyClass_vin',
 	'error_id_vin',
 	]
-# all_records[ordered_cols].to_csv('all_records.csv', encoding='utf8')
-# all_records_no_dupes[ordered_cols].to_csv('all_records_no_dupes.csv', encoding='utf8')
-# matched_vins_simple_id.to_csv('matched_vins.csv', encoding = 'utf8')
+# Create csv files. 
+all_records[ordered_cols].to_csv('all_records.csv', encoding='utf8')
+all_records_no_dupes[ordered_cols].to_csv('all_records_no_dupes.csv', encoding='utf8')
+matched_vins_simple.to_csv('matched_vins_new.csv', encoding = 'utf8')
 
-# For debugging.
-matched_vins_simple = pd.merge(pd.merge(matched_vins_ids, vin, on='VIN_ID'), epa, on='EPA_ID')
-vins_matched_for_comparison = matched_vins_simple.VIN_ID
-epas_matched_for_comparison = matched_vins_simple.EPA_ID
-not_matched_vins_for_comparison = vin.loc[~vin.VIN_ID.isin(vins_matched_for_comparison)]
-not_matched_epas_for_comparison = epa.loc[~epa.EPA_ID.isin(epas_matched_for_comparison)]
+not_matched_vins_for_comparison = vin.loc[~vin.VIN_ID.isin(vins_matched)]
+not_matched_epas_for_comparison = epa.loc[~epa.EPA_ID.isin(epas_matched)]
 not_matched_for_comparison = pd.concat([not_matched_epas_for_comparison, 
 	not_matched_vins_for_comparison])
 
@@ -593,8 +675,11 @@ not_matched_out = not_matched_for_comparison[[
 	'VIN',
 	'counts',
 	'BodyClass',
+	'Trim',
 	'VehicleType',
-	'Series'
+	'Series', 
+	'type',
+	'vtyp3',
 		]]
 
 def clear_use_range(wb, sheet_name):
@@ -607,36 +692,135 @@ def clear_use_range(wb, sheet_name):
 	used_range = xw.Range(*zip(used_range_rows, used_range_cols))
 	used_range.clear()
 
-# out_wb = xw.books.open(r"X:\EPA_MPG\not_matched_comparator.xlsm")
-# clear_use_range(out_wb, 'not_matched')
-# out_wb.sheets('not_matched').range(1, 1).value = not_matched_out
-# clear_use_range(out_wb, 'vin_only')
-# out_wb.sheets('vin_only').range(1, 1).value = not_matched_vins_for_comparison
+out_wb = xw.Book(r"X:\EPA_MPG\not_matched_comparator.xlsm")
+clear_use_range(out_wb, 'not_matched')
+out_wb.sheets('not_matched').range(1, 1).value = not_matched_out
+clear_use_range(out_wb, 'vin_only')
+out_wb.sheets('vin_only').range(1, 1).value = not_matched_vins_for_comparison
 
+######################################################################################################################
+# MPG range distribution.
+######################################################################################################################
 # Create the ranges of values for each VIN. 
-matched_vins_ranges = matched_vins_simple.groupby('VIN')
-matched_vins_ranges['highway08', 'comb08', 'city08'].describe(percentiles=[]).unstack().reset_index().to_csv('duplicate_ranges.csv')
+matched_vins_groups = matched_vins_simple.groupby('VIN_ID_vin')
+matched_vins_ranges = matched_vins_groups['highway08_epa', 'comb08_epa', 'city08_epa'].describe(
+	percentiles=[]).unstack().reset_index().set_index('VIN_ID_vin')
+# Get rid of multilevel, and rename columns. 
+matched_vins_ranges.columns = map('_'.join, zip(matched_vins_ranges.columns.get_level_values(0).tolist(),
+	matched_vins_ranges.columns.get_level_values(1).tolist()))
+matched_vins_ranges.reset_index(inplace=True)
+# Add counts. 
+matched_vins_ranges = pd.merge(matched_vins_ranges, vins_no_dupes[['counts_vin', 'VIN_ID_vin']])
 
-from datetime import datetime
-col_names = 'vin_id, vid_date, vin, mm2, vin8, vin1012, vtyp3'.split(', ')
-col_types = [np.object_, datetime, np.object_, np.int64, np.object_, np.object_, np.object_]
-col_typedict = dict(zip(col_names, col_types))
-vtype = pd.read_csv('for_yb.csv', names=col_names, dtype=col_typedict, usecols=['vin', 'vin8', 'vin1012', 'vtyp3'])
+######################################################################################################################
+# Spread distribution.
+######################################################################################################################
+mpgs = 'highway08, comb08, city08'.split(', ')
+def add_end(l, s):
+	return map(''.join, zip(l, [s]*len(l)))
+mpgs_epa = add_end(mpgs, '_epa')
+mpgs_epa_max = add_end(mpgs_epa, '_max')
+mpgs_epa_min = add_end(mpgs_epa, '_min')
+spread = pd.DataFrame()
+for mpg, mx, mn in zip(mpgs, mpgs_epa_max, mpgs_epa_min):
+	matched_vins_ranges[mpg + '_spread'] = matched_vins_ranges[mx] - matched_vins_ranges[mn]
+	print matched_vins_ranges[mpg + '_spread'].value_counts().sort_index()
+	print matched_vins_ranges[mpg + '_spread'].value_counts().sort_index()/len(matched_vins_ranges) * 100
+	spread[mpg + '_spread_no_wgt'] = matched_vins_ranges[mpg + '_spread'].value_counts().sort_index()	
+	spread[mpg + '_spread'] = matched_vins_ranges[[mpg + '_spread', 'counts_vin']].groupby(mpg + '_spread').sum()
+	spread[mpg + '_spread%'] = spread[mpg + '_spread']/spread[mpg + '_spread'].sum()
+	spread[mpg + '_spread%_cum'] = spread[mpg + '_spread%'].cumsum()
+spread.to_csv('spread.csv') 
+matched_vins_ranges.to_csv('duplicate_ranges.csv')
 
-matched_mins = matched_vins_ranges.min().reset_index()
-['city08']
-matched_mins['vin8'] = matched_mins.VIN.apply(lambda x: x[:8])
-matched_mins['vin1012'] = matched_mins.VIN.apply(lambda x: x[9:12])
-'city08'
+######################################################################################################################
+# Summary.
+######################################################################################################################
+vin_out = matched_vins_no_dupes[vin_vin.columns.tolist() + ['matched_on']]
+keep_cols = ['VIN_ID_vin', 'highway08_epa_min', 'comb08_epa_min', 'city08_epa_min', 'highway08_spread',
+	'city08_epa_count']
+summary = pd.merge(vin_out, matched_vins_ranges[keep_cols], on='VIN_ID_vin')
+summary.rename(columns={'city08_epa_count': 'duplicate_counts'}, inplace=True)
+summary.to_csv('summary_2.csv')
+print('Unique matches: {:.2%}'.format(
+	float(sum(summary.loc[summary.duplicate_counts == 1, 'counts_vin']))/sum(summary.counts_vin)
+	))
 
+freq_dist = summary.duplicate_counts.value_counts(normalize=True).sort_index()
 
-vin_original['vin8'] = vin_original.VIN.apply(lambda x: x[:8])
-vin_original['vin1012'] = vin_original.VIN.apply(lambda x: x[9:12])
+######################################################################################################################
+# Plotting.
+######################################################################################################################
+matched_mins = matched_vins_groups.min()
+grouped = matched_mins.groupby('vtyp3_vin')
 
-merged_vin_original = pd.merge(vin_original, vtype, on=['vin8', 'vin1012'], how='left')
+# vtypes = '2door, 4door, small_pickup, large_pickup, suv, cuv, minivan, full_van'.split(', ')
+# vtypes_lookup = map(lambda x: [str(x)], range(1, 9))
+# vtypes_lookup[1] = '2, 2.1, 2.2'.split(', ')
 
-merged_vin_original.groupby('VIN')
+vtypes = 'car, pickup, suv/cuv, van'.split(', ')
+vtypes_lookup = ['1, 2'.split(', ')] + ['3, 4'.split(', ')] + ['5, 6'.split(', ')] + ['7, 8'.split(', ')]
 
-t = merged_vin_original.head(1000)
+vtypes_dict = dict(zip(vtypes, vtypes_lookup))
+matched_dict = {
+	df_name: pd.concat([grouped.get_group(k) for k in key_list], axis=0)
+	for df_name, key_list in vtypes_dict.items()
+	}
 
-merged_vin_original.drop_duplicates(subset='VIN').to_csv('vin_with_vtyp3.csv')
+bins = 100
+mpg = 'comb08_epa'
+
+fig = plt.figure()
+fig.suptitle('Cumulative distribution of vehicle MPGs for {}'.format(mpg), fontsize=14, fontweight='bold')
+ax = fig.add_subplot(111)
+# fig.subplots_adjust(top=0.85)
+# ax.set_title('axes title')
+
+# evaluate the histogram
+values, base = np.histogram(matched_mins[mpg], bins=bins)
+#evaluate the cumulative
+cumulative = np.cumsum(values) / float(len(matched_mins))
+# plot the cumulative function
+ax.plot(base[:-1], cumulative, label='total')
+
+for k, v in matched_dict.items():
+	# evaluate the histogram
+	values, base = np.histogram(v[mpg], bins=bins)
+	#evaluate the cumulative
+	cumulative = np.cumsum(values) / float(len(v))
+	# plot the cumulative function
+	ax.plot(base[:-1], cumulative, label=k)
+
+# manipulate
+vals = ax.get_yticks()
+ax.set_yticklabels(['{:3.2f}%'.format(x*100) for x in vals])
+
+ax.set_xlabel('MPG')
+ax.set_ylabel('Cumulative distribution')
+
+ax.legend()
+plt.show()
+
+############################################################
+bins = 100
+fig = plt.figure()
+fig.suptitle('Cumulative distribution of vehicle MPGs', fontsize=14, fontweight='bold')
+ax = fig.add_subplot(111)
+
+for mpg in 'comb08, highway08, city08'.split(', '):
+	# evaluate the histogram
+	values, base = np.histogram(matched_mins[mpg], bins=bins)
+	#evaluate the cumulative
+	cumulative = np.cumsum(values) / float(len(matched_mins))
+	# plot the cumulative function
+	ax.plot(base[:-1], cumulative, label=mpg)
+
+# manipulate
+vals = ax.get_yticks()
+ax.set_yticklabels(['{:3.2f}%'.format(x*100) for x in vals])
+
+ax.set_xlabel('MPG')
+ax.set_ylabel('Cumulative distribution')
+
+ax.legend()
+plt.show()

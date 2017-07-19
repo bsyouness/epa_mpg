@@ -1,6 +1,99 @@
 vin_original.loc[vin_original['model'].str.contains('s10'), 'model_mod']
 epa_original.loc[epa_original['model'].str.contains('t10'), 'model_mod']
 
+epa.ix[(epa.make == 'chevrolet') & (epa.model_mod == 'c'), ['model', 'model_mod', 'vtyp3', 'VClass']].drop_duplicates()
+vin.ix[(vin.make == 'chevrolet') & (vin.model_mod == 'c'), ['model', 'model_mod', 'vtyp3', 'VClass']].drop_duplicates()
+
+vin_original.loc[vin_original['VIN'] == '3b7he13yxmm040102']
+
+
+
+epa.ix[(epa.model_mod.str.contains('35')), 'model'].unique()
+epa_1.ix[epa_1.model.str.contains('15|10'), 'model']
+epa.ix[244, ['model', 'model_mod', 'vtyp3', 'VClass']]
+.drop_duplicates()
+
+ = 3
+
+import operator
+len(vin.loc[reduce(operator.and_, [(vin[x] != '-1') for x in on_cols])])
+
+vin.loc[(vin['vtyp3'] != u'-1') & ((vin.displ_mod == u'-1') | (vin.drive_mod == u'-1') | (vin.cylinders == u'-1'))][['drive_mod',
+		'displ_mod',
+		'cylinders',]].drop_duplicates()
+
+vin.loc[(vin['displ_mod'].isnull()), ['displ', 'displ_mod']].drop_duplicates()
+
+		'drive_mod',
+		'displ_mod',
+		'cylinders',
+vin.loc[15181, 'displ_mod']
+
+on_cols = [
+	'make',
+	'model_mod',
+	'year',
+	'vtyp3',
+	'fuelType1_mod',
+	'drive_mod',
+	'displ_mod',
+	'cylinders',
+	]
+
+
+
+potentially_empty = [
+		'displ_mod',
+		'cylinders',
+		'vtyp3',
+		'transmission_type_mod',
+		'transmission_speeds_mod',
+]
+
+def permute(l):
+	"""
+	Return all the possible permutations of a list, e.g. l = [1,2,3] would return [[1,2,3], [2,1,3], [1,3,2], [2,3,1], [3,2,1], [3,1,2]]
+	"""
+	return
+
+def combine(l, n):
+	"combine([1,2,3], 2) returns [[1,2], [1,3], [2,3]]"
+	out = []
+	out = _combine(l.pop(0), l)
+	return combine(li = [ for _ in range(n)]
+	
+	[_combine([l.pop(0)], l)])
+
+	def _combine(i, li):
+		return [i + [j] for j in li]
+
+def all_combinations(l):
+	out = []
+	for i in range(len(l)):
+		out.append(l[i])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+for i in range(len(on_cols)):
+	print(on_cols[i])
+	print(float(len(vin.loc[vin['vtyp3'] == u'-1']))/float(len(vin)))
+
+vin.ix[(vin.make == 'chevrolet') & (vin.model_mod.str.contains('s10')), 'model_mod'].unique()
+ = 'suburban'
+
+vin.ix[(vin.make == 'chevrolet') & (vin.model.str.contains('(^|\s)blazer($|\s)')), 'model'].unique()
+
 = 's10 pickup'
 
 l = list(vin.fuelType1.unique())
@@ -12,9 +105,57 @@ l = list(epa_original.fuelType1.unique())
 l.sort()
 l
 
+epa.loc[epa.model.str.extract(r'(.+)\s[24a]wd.*'), 'model'].unique()
+ 
+epa.ix[(epa.model_mod.str.contains('35')) | (epa.model.str.contains('35')), 
+	['model', 'model_mod', 'make']].drop_duplicates().to_csv('epa_temp.csv')
+vin.ix[(vin.model_mod.str.contains('35')) | (vin.model.str.contains('35')),
+	['model', 'model_mod', 'make']].drop_duplicates().to_csv('vin_temp.csv')
 
-
-
+u'b350 van',
+u'b350 wagon',
+u'b3500 van',
+u'b3500 wagon',
+u'bmw535i',
+u'bmw635csi',
+u'bmw635l6',
+u'bmw735i',
+u'bmw735il',
+u'c350',
+u'c350 4matic',
+u'clk350',
+u'clk350 (cabriolet)',
+u'e350',
+u'e350 (wagon)',
+u'e350 4matic',
+u'e350 4matic (wagon)',
+u'e350 coupe',
+u'ex35',
+u'f355/355 f1',
+u'fx35',
+u'fx35 rwd',
+u'g35',
+u'g35 coupe',
+u'g35 rally',
+u'g35 vandura',
+u'g35x',
+u'gl350 bluetec',
+u'glk350',
+u'glk350 4matic',
+u'i-350 crew cab',
+u'i35',
+u'm35',
+u'm35x',
+u'ml350',
+u'ml350 4matic',
+u'ml350 bluetec',
+u'r350',
+u'r350 4matic',
+u'r350 bluetec',
+u's350',
+u's350d',
+u'slk350',
+u'xg350']
 
 
 
