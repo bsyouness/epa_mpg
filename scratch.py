@@ -1,3 +1,9 @@
+epa.loc[(epa.make == 'chrysler') & (epa.year == 1994), ['model', 'model_mod']]
+ & (epa.model_mod.str.contains('lhs'))]
+
+
+
+
 vin_original.loc[vin_original['model'].str.contains('s10'), 'model_mod']
 epa_original.loc[epa_original['model'].str.contains('t10'), 'model_mod']
 

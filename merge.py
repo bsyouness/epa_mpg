@@ -6,274 +6,367 @@ from datetime import datetime
 from math import isnan
 import numpy as np
 import matplotlib.pyplot as plt
+from itertools import combinations
 
 ######################################################################################################################
-# Load databsets.
+# Load datasets.
 ######################################################################################################################
-epa_raw = pd.read_csv(r'X:\EPA_MPG\epa_data.csv', encoding='utf8', dtype=unicode)
-vin_raw = pd.read_csv(r'X:\EPA_MPG\vin_with_vtyp3.csv', encoding='utf8', dtype=unicode)
+def load_data(epa_file=r'X:\EPA_MPG\epa_data.csv', vin_file=r'X:\EPA_MPG\vin_with_vtyp3.csv', init_yr=1991, last_yr=np.inf):
+	global epa_raw, vin_raw
+	
+	epa_raw = pd.read_csv(epa_file, encoding='utf8', dtype=unicode)
+	vin_raw = pd.read_csv(vin_file, encoding='utf8', dtype=unicode)
 
-epa_original = epa_raw.copy()
-vin_original = vin_raw.copy()
+	epa_original = epa_raw.copy()
+	vin_original = vin_raw.copy()
 
-vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Expedition')
-	& (vin_original.DisplacementL == u'14.6'), ['DisplacementL', 'FuelTypePrimary']] = ['4.6', 'gasoline']
+	# Fix errors in the datasets. 
+	vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Expedition')
+		& (vin_original.DisplacementL == u'14.6'), ['DisplacementL', 'FuelTypePrimary']] = ['4.6', 'gasoline']
 
-vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Explorer') 
-	& ((vin_original.VIN.apply(lambda x: x[7]) == 'E') | (vin_original.VIN.apply(lambda x: x[7]) == 'X')), 
-	['DisplacementL', 'FuelTypePrimary']] = ['4.0', 'gasoline']
+	vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Explorer') 
+		& ((vin_original.VIN.apply(lambda x: x[7]) == 'E') | (vin_original.VIN.apply(lambda x: x[7]) == 'X')), 
+		['DisplacementL', 'FuelTypePrimary']] = ['4.0', 'gasoline']
 
-vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Explorer') 
-	& (vin_original.VIN.apply(lambda x: x[7]) == 'P'), 
-	['EngineCylinders', 'DisplacementL', 'FuelTypePrimary']] = ['8', '5.0', 'gasoline']
+	vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Explorer') 
+		& (vin_original.VIN.apply(lambda x: x[7]) == 'P'), 
+		['EngineCylinders', 'DisplacementL', 'FuelTypePrimary']] = ['8', '5.0', 'gasoline']
 
-# Get rid of the 'Results_0_' string in the column titles
-# pattern = re.compile(u'Results_0_(.+)')
-# vin_original.columns = [pattern.search(x).groups()[0] 
-# 	if pattern.search(x) else x for x in vin_original.columns]
+	# Define integer id based on error code from VIN database. 
+	vin_original['error_id'] = vin_original.ErrorCode.apply(
+		lambda x: re.match('([0-9]+).*', x).groups()[0])
 
-# Define integer id based on error code from VIN database. 
-vin_original['error_id'] = vin_original.ErrorCode.apply(
-	lambda x: re.match('([0-9]+).*', x).groups()[0])
+	# Define columns on which the merge will be performed.
+	epa_cols = [
+		'make',
+		'model',
+		'year',
+		'fuelType1',
+		'fuelType2',
+		'drive',
+		'transmission_type',
+		'transmission_speeds',
+		'cylinders',
+		'displ',
+		]
+	vin_cols = [
+		'Make',
+		'Model',
+		'ModelYear',
+		'FuelTypePrimary',
+		'FuelTypeSecondary',
+		'DriveType',
+		'TransmissionStyle', 
+		'TransmissionSpeeds',
+		'EngineCylinders',
+		'DisplacementL',
+		]
 
-# Define columns on which the merge will be performed.
-epa_cols = [
-	'make',
-	'model',
-	'year',
-	'fuelType1',
-	'drive',
-	'transmission_type',
-	'transmission_speeds',
-	'cylinders',
-	'displ',
-	]
-vin_cols = [
-	'Make',
-	'Model',
-	'ModelYear',
-	'FuelTypePrimary',
-	'DriveType',
-	'TransmissionStyle', 
-	'TransmissionSpeeds',
-	'EngineCylinders',
-	'DisplacementL',
-	]
+	# Get rid of undesirable columns.
+	vin_keep_cols = ['VIN', 'VehicleType', 'BodyClass', 'error_id', 'Series', 'vtyp3', 'counts', 'Trim', 'Trim2'] + vin_cols 
+	vin_original.drop([x for x in vin_original.columns if x not in vin_keep_cols], axis=1, inplace=True)
+	epa_keep_cols = ['trany', 'city08', 'city08U', 'comb08', 'comb08U', 'highway08', 'highway08U', 'VClass',] + epa_cols
+	epa_original.drop([x for x in epa_original.columns if x not in epa_keep_cols], axis=1, inplace=True)
 
-# Get rid of undesirable columns.
-vin_keep_cols = ['VIN', 'VehicleType', 'BodyClass', 'error_id', 'Series', 'vtyp3', 'counts', 'Trim', 'Trim2'] + vin_cols 
-vin_original.drop([x for x in vin_original.columns if x not in vin_keep_cols], axis=1, inplace=True)
-epa_keep_cols = ['trany', 'city08', 'city08U', 'comb08', 'comb08U', 'highway08', 'highway08U', 'VClass',] + epa_cols
-epa_original.drop([x for x in epa_original.columns if x not in epa_keep_cols], axis=1, inplace=True)
+	# Rename the VIN dataframe columns to be the same as the EPA dataframe columns.
+	vin_original = vin_original.rename(columns=dict(zip(vin_cols, epa_cols)))
 
-# Rename the VIN dataframe columns to be the same as the EPA dataframe columns.
-vin_original = vin_original.rename(columns=dict(zip(vin_cols, epa_cols)))
+	# Get rid of rows where certain info is missing.
+	essential_cols = 'make, model, year, fuelType1'.split(', ')
+	for col in essential_cols:
+		vin_original = vin_original.loc[~vin_original[col].isnull()]
 
-# Get rid of rows where certain info is missing.
-essential_cols = 'make, model, year, fuelType1'.split(', ')
-for col in essential_cols:
-	vin_original = vin_original.loc[~vin_original[col].isnull()]
+	# Replace missing values (nan) with u'-1'.
+	vin_original, epa_original = [
+		df.apply(lambda x: pd.Series.fillna(x, u'-1')) for df in (vin_original, epa_original)]
 
-# Replace missing values (nan) with u'-1'.
-vin_original, epa_original = [
-	df.apply(lambda x: pd.Series.fillna(x, u'-1')) for df in (vin_original, epa_original)]
+	# Make everything lower case and trim white spaces.
+	vin_original, epa_original = [
+		df.applymap(lambda s: s.lower().strip()) for df in (vin_original, epa_original)]
 
-# Make everything lower case and trim white spaces.
-vin_original, epa_original = [
-	df.applymap(lambda s: s.lower().strip()) for df in (vin_original, epa_original)]
+	# Get rid of undesirable vehicles.
+	filter_out_strs = 'incomplete vehicle, trailer, motorcycle, bus, low speed vehicle (lsv)'.split(', ')
+	vin_original = vin_original.loc[~vin_original['VehicleType'].isin(filter_out_strs)]
+	vin_original = vin_original.loc[~vin_original['BodyClass'].str.contains('incomplete')]
 
-# Get rid of undesirable vehicles.
-filter_out_strs = 'incomplete vehicle, trailer, motorcycle, bus, low speed vehicle (lsv)'.split(', ')
-vin_original = vin_original.loc[~vin_original['VehicleType'].isin(filter_out_strs)]
-vin_original = vin_original.loc[~vin_original['BodyClass'].str.contains('incomplete')]
+	# Get rid of tranmission type in model for epa_original data. 
+	pattern = r'(.+)\s[24a]wd.*'
+	epa_original['model'] = epa_original['model'].apply(
+		lambda x: re.search(pattern, x).groups()[0] if re.search(pattern, x) else x)
 
-# Get rid of tranmission type in model for epa_original data. 
-pattern = r'(.+)\s[24a]wd.*'
-epa_original['model'] = epa_original['model'].apply(
-	lambda x: re.search(pattern, x).groups()[0] if re.search(pattern, x) else x)
+	# Get rid of duplicates in fields (e.g. 'gasoline, gasoline', or 'audi, audi').
+	def del_duplicate_in_str(s):
+		def _del_duplicate_in_str(s):
+			found = pattern.search(s)
+			if found:
+				s0, s1 = found.groups()
+				if pattern.search(s0):
+					return _del_duplicate_in_str(s0)
+				elif s0 == s1:
+					return s0
+			return s
 
-# Get rid of duplicates in fields (e.g. 'gasoline, gasoline', or 'audi, audi').
-def del_duplicate_in_str(s):
-	def _del_duplicate_in_str(s):
-		found = pattern.search(s)
-		if found:
-			s0, s1 = found.groups()
-			if pattern.search(s0):
-				return _del_duplicate_in_str(s0)
-			elif s0 == s1:
-				return s0
-		return s
+		if not isinstance(s, unicode):
+			return s
+		pattern = re.compile('(.*), (.*)')
+		return _del_duplicate_in_str(s)	
+	vin_original = vin_original.applymap(del_duplicate_in_str)
 
-	if not isinstance(s, unicode):
-		return s
-	pattern = re.compile('(.*), (.*)')
-	return _del_duplicate_in_str(s)	
-vin_original = vin_original.applymap(del_duplicate_in_str)
+	# Drop certain makes. 
+	drop_makes = \
+		'''volvo truck
+		western star
+		whitegmc
+		winnebago
+		winnebago industries, inc.
+		workhorse
+		ai-springfield
+		autocar industries
+		capacity of texas
+		caterpillar
+		e-one
+		freightliner
+		kenworth
+		mack
+		navistar
+		peterbilt
+		pierce manufacturing
+		spartan motors chassis
+		terex advance mixer
+		the vehicle production group
+		utilimaster motor corporation
+		international
+		'''.split('\n\t')
+	vin_original = vin_original.loc[~vin_original.make.isin(drop_makes)]
 
-# Modify makes. 
-drop_makes = \
-	'''volvo truck
-	western star
-	whitegmc
-	winnebago
-	winnebago industries, inc.
-	workhorse
-	ai-springfield
-	autocar industries
-	capacity of texas
-	caterpillar
-	e-one
-	freightliner
-	kenworth
-	mack
-	navistar
-	peterbilt
-	pierce manufacturing
-	spartan motors chassis
-	terex advance mixer
-	the vehicle production group
-	utilimaster motor corporation
-	international
-	'''.split('\n\t')
-vin_original = vin_original.loc[~vin_original.make.isin(drop_makes)]
+	# Take out flexible fuel vehicles. 
+	vin_original, epa_original = [df.loc[~(df.fuelType1.str.contains('ffv|flexible|ethanol|e85|natural gas')) &
+		~(df.model.str.contains('ffv|flexible|ethanol|e85|natural gas'))] 
+		for df in (vin_original, epa_original)]
 
-mapping = {
-	'vin': {
-		'fuelType1':	{
-			'compressed natural gas (cng)':									'natural gas',
-			'liquefied petroleum gas (propane or lpg)':						'natural gas',
-			'liquefied natural gas (lng)':									'natural gas',
-			'gasoline, diesel':												'gasoline',
-			'diesel, gasoline':												'gasoline',
-			'ethanol (e85)':												'ethanol',
-			'compressed natural gas (cng), gasoline':						'gasoline',
-			'gasoline, compressed natural gas (cng)':						'gasoline',
-			'compressed hydrogen / hydrogen':								'hydrogen',
-			'fuel cell':													'hydrogen',
+	# Modify fuel types to account for electric vehicles. 
+	def mod_electric_vehicles(df):
+		df.loc[df.model.str.contains('plug'), 'fuelType1'] = 'phev'
+		df.loc[(df.model.str.contains('(hev|hybrid)')) | 
+			((df.fuelType1.str.contains('gasoline')) & (df.fuelType1.str.contains('electric'))) |
+			((df.fuelType1.str.contains('gasoline')) & (df.fuelType2.str.contains('electric'))), 
+			'fuelType1'] = 'hev'
+		df.loc[(df.model.str.contains('bev')) | (df.model.str.contains('electric')) | 
+			(df.fuelType1.str.contains('electric')), 'fuelType1'] = 'bev'
+		return df
+	epa_original = mod_electric_vehicles(epa_original)
+	vin_original = mod_electric_vehicles(vin_original)
+
+	mapping = {
+		'vin': {
+			'fuelType1':	{
+				'compressed natural gas (cng)':									'natural gas',
+				'liquefied petroleum gas (propane or lpg)':						'natural gas',
+				'liquefied natural gas (lng)':									'natural gas',
+				'gasoline, diesel':												'gasoline',
+				'diesel, gasoline':												'gasoline',
+				'ethanol (e85)':												'ethanol',
+				'compressed natural gas (cng), gasoline':						'gasoline',
+				'gasoline, compressed natural gas (cng)':						'gasoline',
+				'compressed hydrogen / hydrogen':								'hydrogen',
+				'fuel cell':													'hydrogen',
+				},
+			'drive':	{
+				'4x2':																'two',
+				'6x6':																'all',
+				'6x2':																'two',
+				'8x2':																'two',
+				'rwd/ rear wheel drive':											'two',
+				'fwd/front wheel drive':											'two',
+				'4x2, rwd/ rear wheel drive':										'two',
+				'4x2, fwd/front wheel drive':										'two',
+				'rwd/ rear wheel drive, 4x2':										'two',
+				'fwd/front wheel drive, 4x2':										'two',
+				'4wd/4-wheel drive/4x4':											'all',
+				'awd/all wheel drive':												'all',
+				},
+			'transmission_type':	{
+				'manual/standard': 												'manu',
+				'automated manual transmission (amt)': 							'manu',
+				'manual/standard, manual/standard': 							'manu',
+				'dual-clutch transmission (dct)': 								'manu',
+				'continuously variable transmission (cvt)': 					'auto',
+				'automatic': 													'auto',
+				'automatic, continuously variable transmission (cvt)': 			'auto',
+				}
 			},
-		'drive':	{
-			'4x2':																'two',
-			'6x6':																'all',
-			'6x2':																'two',
-			'8x2':																'two',
-			'rwd/ rear wheel drive':											'two',
-			'fwd/front wheel drive':											'two',
-			'4x2, rwd/ rear wheel drive':										'two',
-			'4x2, fwd/front wheel drive':										'two',
-			'rwd/ rear wheel drive, 4x2':										'two',
-			'fwd/front wheel drive, 4x2':										'two',
-			'4wd/4-wheel drive/4x4':											'all',
-			'awd/all wheel drive':												'all',
-			},
-		'transmission_type':	{
-			'manual/standard': 												'manu',
-			'automated manual transmission (amt)': 							'manu',
-			'manual/standard, manual/standard': 							'manu',
-			'dual-clutch transmission (dct)': 								'manu',
-			'continuously variable transmission (cvt)': 					'auto',
-			'automatic': 													'auto',
-			'automatic, continuously variable transmission (cvt)': 			'auto',
+		'epa': {
+			'fuelType1':	{
+				'regular gasoline':			'gasoline',
+				'premium gasoline':			'gasoline',
+				'midgrade gasoline':		'gasoline',
+				},
+			'drive':	{
+				'rear-wheel drive':				'two',
+				'front-wheel drive':			'two',
+				'2-wheel drive':				'two',
+				'all-wheel drive':				'all',
+				'4-wheel drive':				'all',
+				'4-wheel or all-wheel drive':	'all',
+				'part-time 4-wheel drive':		'all',
+				},
 			}
-		},
-	'epa': {
-		'fuelType1':	{
-			'regular gasoline':			'gasoline',
-			'premium gasoline':			'gasoline',
-			'midgrade gasoline':		'gasoline',
-			},
-		'drive':	{
-			'rear-wheel drive':				'two',
-			'front-wheel drive':			'two',
-			'2-wheel drive':				'two',
-			'all-wheel drive':				'all',
-			'4-wheel drive':				'all',
-			'4-wheel or all-wheel drive':	'all',
-			'part-time 4-wheel drive':		'all',
-			},
 		}
-	}
-## Modify fuel type, drive type for epa and vin, and transmission type for vin. 
-for (df, df_name) in ((epa_original, 'epa'), (vin_original, 'vin')):
-	for item in mapping[df_name]:
-		df[item + '_mod'] = df[item]
-		df[item + '_mod'] = df[item].replace(mapping[df_name][item])
+	## Modify fuel type, drive type for epa and vin, and transmission type for vin. 
+	for (df, df_name) in ((epa_original, 'epa'), (vin_original, 'vin')):
+		for item in mapping[df_name]:
+			df[item + '_mod'] = df[item]
+			df[item + '_mod'] = df[item].replace(mapping[df_name][item])
 
-# Make years ints.
-epa_original.year = epa_original.year.apply(int)
-vin_original.year = vin_original.year.apply(int)
+	# Make years ints.
+	epa_original.year = epa_original.year.apply(int)
+	vin_original.year = vin_original.year.apply(int)
 
-# Only keep years between 1991 and 2010. 
-vin_original = vin_original.loc[(vin_original.year >= 1991) & (vin_original.year <= 2010)]
-epa_original = epa_original.loc[(epa_original.year >= 1991) & (epa_original.year <= 2010)]
+	# Only keep years between 1991 and 2010. 
+	vin_original = vin_original.loc[(vin_original.year >= 1991)] # & (vin_original.year <= 2010)]
+	epa_original = epa_original.loc[(epa_original.year >= 1991)] # & (epa_original.year <= 2010)]
 
-# Take out flexible fuel vehicles. 
-vin_original, epa_original = [df.loc[~df.fuelType1.str.contains('flexible')] 
-	for df in (vin_original, epa_original)]
-def mod_electric_vehicles(df):
-	df.loc[df.model.str.contains('plug'), 'fuelType1'] = 'phev'
-	df.loc[(df.model.str.contains('(hev|hybrid)')) | ((df.fuelType1.str.contains('gasoline')) &
-			(df.fuelType1.str.contains('electric'))), 'fuelType1'] = 'hev'
-	df.loc[(df.model.str.contains('bev')) | (df.model.str.contains('electric')) | 
-		(df.fuelType1.str.contains('electric')), 'fuelType1'] = 'bev'
-	return df
-epa_original = mod_electric_vehicles(epa_original)
-vin_original = mod_electric_vehicles(vin_original)
+	# Add an ID for EPA before the splitting occurs. Equivalent to VIN. 
+	epa_original['EPA'] = range(1, len(epa_original) + 1)
 
-# Add model_mod.
-vin_original['model_mod'] = vin_original['model']
-epa_original['model_mod'] = epa_original['model']
+	# Add model_mod.
+	vin_original['model_mod'] = vin_original['model']
+	epa_original['model_mod'] = epa_original['model']
 
-# Turn pick-up into pickup. 
-vin_original['model_mod'] = vin_original.model_mod.str.replace('pick-up', 'pickup')
+	# Remove class and series from model names. 
+	index_mod = vin_original.loc[vin_original.model_mod.str.contains(r'\w+[ ]*-[ ]*(?:class|series)')].index
+	vin_original.loc[index_mod, 'model_mod'] = \
+		vin_original.loc[index_mod, 'model_mod'].str.extract(r'(\w+)[ ]*-[ ]*(?:class|series)')
 
-# Turn anything that looks like this: texttext-123123 (\w+-\d+) into texttext123123 (drop the dash)
-# e.g. f-350
-vin_original.loc[vin_original.model.str.contains(r'[^\d]+-\d+.*'), 'model_mod'] = \
-	vin_original.loc[vin_original.model.str.contains(r'[^\d]+-\d+.*'), 'model_mod'].str.replace('-', '')
-epa_original.loc[epa_original.model.str.contains(r'[^\d]+-\d+.*'), 'model_mod'] = \
-	epa_original.loc[epa_original.model.str.contains(r'[^\d]+-\d+.*'), 'model_mod'].str.replace('-', '')
+	# Replace all instances of pick-up with pickup.
+	vin_original['model_mod'] = vin_original.model_mod.str.replace('pick-up', 'pickup')
 
-# Split rows that contain '/' into several rows. 
-vin_expanded = pd.concat(
-		[pd.Series(np.append(row[[col for col in vin_original.columns if col != 'model_mod']].values, [x]))
-			for _, row in vin_original.iterrows() 
-			for x in map(unicode.strip, re.findall(r'[\w ]+', row['model_mod']))],
-		axis=1).transpose()
-def split_row(s, separator):
-	pattern1 = re.compile(r'(.*?)(?=\S*[{}] *\S*?)(\S*)(.*)'.format(separator))
-	if pattern1.match(s):
-		groups = pattern1.match(s).groups()
-		parts = map(unicode.strip, re.split(separator, groups[1]))
-		pattern2 = re.compile(r'([\w\W]*?)(\d+)$')
-		subparts = []
-		for part in parts:
-			if re.match(pattern2, part):
-				subparts.append(re.match(pattern2, part).groups())
-		if len(subparts) == len(parts):
-			zip_subparts =  zip(*subparts)
-			def find_non_blank(t):
-				try: return reduce(lambda x, xs: x if x != '' else xs[0], t)
-				except: return ''
-			default = map(find_non_blank, zip_subparts)
-			parts = [(subpart1 or default[0]) + (subpart2 or default[1]) for (subpart1, subpart2) in subparts]
-		return map(''.join, [[groups[0], x, groups[2]] for x in parts])
-	else:
-		return [s]
-epa_expanded = pd.concat(
-		[pd.Series(np.append(row[[col for col in epa_original.columns if col != 'model_mod']].values, [x]))
-			for _, row in epa_original.iterrows() 
-			for x in split_row(row['model_mod'], '\/|,')],
-		axis=1).transpose()
-vin_expanded.columns, epa_expanded.columns = vin_original.columns, epa_original.columns
-vin_original, epa_original = vin_expanded, epa_expanded
+	# Drop all dashes (will be taken care of on a case-by-case basis. 
+	# vin_original['model_mod'] = vin_original.model_mod.str.replace('-', ' ')
 
-# Add IDs
-vin_original['VIN_ID'] = range(1, len(vin_original) + 1)
-epa_original['EPA_ID'] = range(1, len(epa_original) + 1)
+	# Turn anything that looks like this: texttext-123123 (\w+-\d+) into texttext123123 (drop the dash)
+	# e.g. f-350
+	# Do this using a for-loop with df. 
+	vin_original.loc[vin_original.model.str.contains(r'[^\d]+-\d+.*'), 'model_mod'], \
+	epa_original.loc[epa_original.model.str.contains(r'[^\d]+-\d+.*'), 'model_mod'] = [
+		df.loc[df.model.str.contains(r'[^\d]+-\d+.*'), 'model_mod'].str.replace('-', '') 
+		for df in (vin_original, epa_original)]
 
-# Reset index.
-vin_original = vin_original.reset_index(drop=True)
-epa_original = epa_original.reset_index(drop=True)
+	# For chrysler models, replace town & country with townandcountry. 
+	vin_original.loc[(vin_original.make == 'chrysler') & (vin_original.model_mod == 'town & country'), 'model_mod'] = u'townandcountry'
+
+	# Split rows that contain separators into several rows. 
+	## In VIN. 
+	vin_expanded = pd.concat(
+			[pd.Series(np.append(row[[col for col in vin_original.columns if col != 'model_mod']].values, [x]))
+				for _, row in vin_original.iterrows() 
+				for x in map(unicode.strip, re.findall(r'[\w -]+', row['model_mod']))],
+			axis=1).transpose()
+	def split_row(s, separator):
+		pattern1 = re.compile(r'(.*?)(?=\S*(?:{}) *\S*?)(\S*)(.*)'.format(separator))
+		if pattern1.match(s):
+			groups = pattern1.match(s).groups()
+			parts = map(unicode.strip, re.split(separator, groups[1]))
+			# For cases like: srt-8/9
+			pattern2 = re.compile(r'([\w\W]*?)(\d+)$') # e.g. srt-9
+			subparts = []
+			for part in parts:
+				if re.match(pattern2, part):
+					subparts.append(re.match(pattern2, part).groups())
+			# Check that we're in a case like srt-8/9 and not, 636/mrx-8.
+			if len(subparts) == len(parts) and subparts[0][0] != '':
+				def find_non_blank(t):
+					try: return reduce(lambda x, xs: x if x != '' else xs[0], t)
+					except: return ''
+				default = map(find_non_blank, zip(*subparts))
+				parts = [(subpart1 or default[0]) + (subpart2 or default[1]) for (subpart1, subpart2) in subparts]
+			return map(''.join, [[groups[0], x, groups[2]] for x in parts])
+		else:
+			return [s]
+	## In EPA. 
+	## First, modify the models that will be split. 
+	separator = r'/|,'
+	# Trim all white spaces from model names that contains slashes with contiguous spaces.
+	def trim_slashes(s):
+		for sep in separator.split('|'):
+			s = re.sub(' *{} *'.format(sep).encode('string-escape'), sep.encode('string-escape'), s)
+		return s
+	index_mod = epa_original.loc[epa_original.model.str.contains(separator)].index
+	epa_original.loc[index_mod, 'model_mod'] = \
+		epa_original.loc[index_mod, 'model_mod'].apply(trim_slashes)
+	## Delete all spaces from a subset of the makes. 
+	makes_no_spaces = 'bmw, buick, cadillac, lexus, subaru, rolls-royce'.split(', ')
+	index_mod = epa_original.loc[(epa_original.make.isin(makes_no_spaces)) & (epa_original.model.str.contains(separator))].index
+	epa_original.loc[index_mod, 'model_mod'] = \
+		epa_original.loc[index_mod, 'model_mod'].replace(' ', '-', regex=True)
+	## Lumina model.
+	epa_original.loc[epa_original.model.str.contains(r'(?=.*lumina.*)(?=.*apv.*)'), 'model_mod'] = 'lumina apv'
+	## Replace spaces with dashes. 
+	def replace_spaces(s, pattern, replace_with='-'):
+		replace_with_ = lambda s: s.replace(' ', replace_with)
+		found_strs = re.findall(pattern, s)
+		for _s in found_strs:
+			s = re.sub(_s, replace_with_(_s), s)
+		return s
+	## Monte-carlo model.
+	pattern = re.compile('monte carlo')
+	index_mod = epa_original.loc[(epa_original.make == 'chevrolet')].index
+	epa_original.loc[index_mod, 'model_mod'] = \
+		epa_original.loc[index_mod, 'model_mod'].apply(lambda x: replace_spaces(x, pattern, ''))
+	## Chrysler models. 
+	models_w_spaces = 'new yorker, town and country, fifth avenue, grand \S*'.split(', ')
+	pattern = re.compile('(?=(' + '|'.join('{}'.format(x) for x in models_w_spaces) + '))')
+	index_mod = epa_original.loc[(epa_original.make == 'chrysler') & epa_original.model_mod.str.contains(pattern)].index
+	epa_original.loc[index_mod, 'model_mod'] = \
+		epa_original.loc[index_mod, 'model_mod'].apply(lambda x: replace_spaces(x, pattern, ''))
+	## Ferrari models. 
+	pattern = re.compile('\S* f1')
+	index_mod = epa_original.loc[(epa_original.make == 'ferrari') & epa_original.model_mod.str.contains(pattern)].index
+	epa_original.loc[index_mod, 'model_mod'] = \
+		epa_original.loc[index_mod, 'model_mod'].apply(lambda x: replace_spaces(x, pattern, ''))
+	epa_original.loc[epa_original.make == 'ferrari', 'model_mod'] = \
+		epa_original.loc[epa_original.make == 'ferrari', 'model_mod'].apply(lambda s: s.replace('ferrari', '').strip())
+	## Mercedes models. 
+	epa_original.loc[epa_original.make == 'mercedes-benz', 'model_mod'] = \
+		epa_original.loc[epa_original.make == 'mercedes-benz', 'model_mod'].apply(lambda s: s.replace('600sel', '600 sel'))
+	## Pontiac models. 
+	pattern = re.compile('(.*)(trans [^\s/]*)(.*)')
+	index_mod = epa_original.loc[(epa_original.make == 'pontiac') & epa_original.model_mod.str.contains(pattern)].index
+	epa_original.loc[index_mod, 'model_mod'] = \
+		epa_original.loc[index_mod, 'model_mod'].apply(lambda s: re.sub(pattern, r'\1trans\3', s))
+	## Expand EPA models. 
+	epa_expanded = pd.concat(
+			[pd.Series(np.append(row[[col for col in epa_original.columns if col != 'model_mod']].values, [x]))
+				for _, row in epa_original.iterrows() 
+				for x in split_row(row['model_mod'], separator)],
+			axis=1).transpose()
+	vin_expanded.columns, epa_expanded.columns = vin_original.columns, epa_original.columns
+	vin_original, epa_original = vin_expanded, epa_expanded
+	# Delete all the spaces from remaining models. 
+	# vin_original.model_mod, epa_original.model_mod = [df.model_mod.replace(' ', '-', regex=True) for df in (vin_original, epa_original)]
+
+	# Add IDs
+	vin_original['VIN_ID'] = range(1, len(vin_original) + 1)
+	epa_original['EPA_ID'] = range(1, len(epa_original) + 1)
+
+	# Reset index.
+	vin_original = vin_original.reset_index(drop=True)
+	epa_original = epa_original.reset_index(drop=True)
+
+######################################################################################################################
+# Create a list of the split models.
+######################################################################################################################
+# Original VIN and EPA data. 
+vin_original.loc[vin_original.model != vin_original.model_mod, 'model, model_mod, make'.split(', ')
+	].drop_duplicates().sort_values('model').to_csv('vin_original_changed_models.csv')
+epa_original.loc[epa_original.model != epa_original.model_mod, 'model, model_mod, make'.split(', ')
+	].drop_duplicates().sort_values('model').to_csv('epa_original_changed_models.csv')
+
+# Processed VIN and EPA data. 
+vin.loc[vin.model != vin.model_mod, 'model, model_mod, make'.split(', ')].drop_duplicates().sort_values('model'
+	).to_csv('vin_changed_models.csv')
+epa.loc[epa.model != epa.model_mod, 'model, model_mod, make'.split(', ')].drop_duplicates().sort_values('model'
+	).to_csv('epa_changed_models.csv')
 
 ######################################################################################################################
 # Modify the basics.
@@ -287,14 +380,7 @@ essential_cols = 'make, model, year, fuelType1, displ, cylinders'.split(', ')
 for col in essential_cols:
 	vin_1 = vin_1.loc[~vin_1[col].isnull()]
 
-# Merge the vin_1 db with the ERG db.
-# erg = pd.read_csv('X:\EPA_MPG\ERG_output.csv', header=None, dtype=unicode)
-# erg.columns = ['VIN', 'counts']
-# erg = erg[erg['counts'] != '.']
-# erg['counts'] = erg['counts'].astype(int)
-# erg = erg.loc[erg['counts'] > 10]
-# erg['VIN'] = erg['VIN'].apply(str.lower)
-# vin_1 = pd.merge(vin_1, erg, how='inner')
+# Make the counts integers. 
 vin_1['counts'] = vin_1['counts'].astype(int)
 
 # Modify transmission information
@@ -361,32 +447,41 @@ epa = epa_1.copy()
 vin = vin_1.copy()
 
 # In vin.
+default_type = '0'
 vin['type'] = np.nan
-vin.loc[(vin.vtyp3.str.contains(r'1|2')) | (vin.VehicleType.str.contains('car')), 'type'] = 'car'
+vin.loc[(vin.vtyp3.str.contains(r'1|2')) | (vin.VehicleType.str.contains('car')), 'type'] = default_type
 ton_dict = {'1/4': '15', '1/2': '15', '3/4': '25', '1': '35'}
 # In model name. 
-vin.loc[(vin.type != 'car') & (vin.model_mod.str.contains(r'(\D|^)(15|25|35)')), 'type'] = \
+vin.loc[(vin.type != default_type) & (vin.model_mod.str.contains(r'(\D|^)(15|25|35)')), 'type'] = \
 	vin.model_mod.str.extract(r'(\D|^)(15|25|35)')[1]
 # In series name. 
-vin.loc[(vin.type != 'car') & (vin.Series.str.contains(r'(\D|^)(15|25|35)')), 'type'] = \
+vin.loc[(vin.type != default_type) & (vin.Series.str.contains(r'(\D|^)(15|25|35)')), 'type'] = \
 	vin.Series.str.extract(r'(\D|^)(15|25|35)')[1]
-vin.loc[(vin.type != 'car') & (vin.Series.str.contains(r'([^\(\s]*)\ston')), 'type'] = \
+vin.loc[(vin.type != default_type) & (vin.Series.str.contains(r'([^\(\s]*)\ston')), 'type'] = \
 	vin.Series.str.extract(r'([^\(\s]*)\ston').replace(ton_dict)
 # In series name. 
-vin.loc[(vin.type != 'car') & (vin.Trim.str.contains(r'(\D|^)(15|25|35)')), 'type'] = \
+vin.loc[(vin.type != default_type) & (vin.Trim.str.contains(r'(\D|^)(15|25|35)')), 'type'] = \
 	vin.Trim.str.extract(r'(\D|^)(15|25|35)')[1]
-vin.loc[(vin.type != 'car') & (vin.Trim.str.contains(r'([^\(\s]*)\ston')), 'type'] = \
+vin.loc[(vin.type != default_type) & (vin.Trim.str.contains(r'([^\(\s]*)\ston')), 'type'] = \
 	vin.Trim.str.extract(r'([^\(\s]*)\ston').replace(ton_dict)
-# Replace nans with 'car'
-vin.loc[(vin.type.isnull()) | (~vin.type.isin(['car'] + ton_dict.values())), 'type'] = 'car'
+# Replace nans with the default type string.
+vin.loc[(vin.type.isnull()) | (~vin.type.isin([default_type] + ton_dict.values())), 'type'] = default_type
+# EPA has a separate model called accord wagon; in VIN, BodyClass identifies the wagons; 
+# so we create a separate model in VIN called accord-wagon.
+vin.loc[(vin.make == 'honda') & (vin.model == 'accord') & (vin.BodyClass == 'wagon'), 'model_mod'] = 'accord-wagon'
+epa.loc[(epa.make == 'honda') & (epa.model == 'accord wagon'), 'model_mod'] = 'accord-wagon'
+# EPA has a separate model called matrix, whereas VIN has a model corolla matrix; 
+# so we create a separate model in VIN called matrix.
+vin.loc[(vin.make == 'toyota') & (vin.model == 'corolla matrix'), 'model_mod'] = 'matrix'
 
 # In epa.
 # In model name.
 epa['type'] = np.nan
-epa.loc[~epa.VClass.str.contains(r'pickup|sport|van'), 'type'] = 'car'
-epa.loc[(epa.type != 'car') & (epa.model.str.contains('10|15|25|35')), 'type'] = epa.model.str.extract('(10|15|25|35)').replace({'10': '15'})
+epa.loc[~epa.VClass.str.contains(r'pickup|sport|van'), 'type'] = default_type
+epa.loc[(epa.type != default_type) & (epa.model.str.contains('10|15|25|35')), 'type'] = \
+	epa.model.str.extract('(10|15|25|35)').replace({'10': '15'})
 # Replace nans with 'car'
-epa.loc[epa.type.isnull(), 'type'] = 'car'
+epa.loc[epa.type.isnull(), 'type'] = default_type
 
 # Modify makes. 
 ## Ram.
@@ -408,6 +503,20 @@ vin.ix[(vin.make == 'chrysler') & (vin.model_mod == 'caravan'), 'make'] = 'dodge
 vin.ix[(vin.make == 'sprinter (dodge or freightliner)'), 'make'] = 'dodge'
 
 # Modify models. 
+epa.loc[(epa.make == 'acura') & epa.model.str.contains(r'\d\.\d.*'), 'model_mod'] = \
+	epa.loc[(epa.make == 'acura') & epa.model.str.contains(r'\d\.\d.*'), 'model_mod'].apply(
+		lambda s: re.sub(r'\d\.\d(.*)', r'\1', s))
+## Infiniti. 
+epa.loc[(epa.make == 'infiniti') & epa.model.str.contains(r'(?=.*?)x(?=$|\s)'), 'model_mod'] = \
+	epa.loc[(epa.make == 'infiniti') & epa.model.str.contains(r'(?=.*?)x(?=$|\s)'), 'model_mod'].apply(
+		lambda s: re.sub(r'(.*?)x(?=$|\s).*', r'\1', s))
+## Nissan. 
+epa.loc[(epa.make == 'nissan'), 'model_mod'] = \
+	epa.loc[(epa.make == 'nissan'), 'model_mod'].replace('truck', 'pickup', regex=True)
+epa.loc[epa.model.str.contains('pathfinder armada'), 'model_mod']	= 'armada'
+## BMW. 
+epa.loc[(epa.make == 'bmw'), 'model_mod'] = \
+	epa.loc[(epa.make == 'bmw'), 'model_mod'].replace(' convertible', 'c', regex=True)
 ## Delete from EPA all models that contain chassis in model name. 
 epa = epa.loc[~epa.model.str.contains('chassis')]
 ## All models with displacements in the model name, e.g. '190e 2.3-16'
@@ -424,9 +533,9 @@ epa.loc[(epa.make == 'ford') & (epa.model.str.contains('ltd crown victoria')), '
 ### Replace 'crown victoria' with 'crown victoria police' in VIN for make 'ford' when `series == 'police interceptor'`
 vin.loc[(vin.make == 'ford') & (vin.model.str.contains('crown victoria')) & (vin.Series == 'police interceptor'),
 	'model_mod'] = 'crown victoria police'
-## Chrysler.
+## Chrysler. 
 ### Replace '300c' and '300c/srt' with '300' in EPA
-epa.loc[(epa.make == 'chrysler') & (epa.model.str.contains('300')), 'model'] = '300'
+epa.loc[(epa.make == 'chrysler') & (epa.model.str.contains('300')), 'model_mod'] = '300'
 ## Saturn.
 ### Replace L100/200 with LS1 in EPA when year is larger than 2001 (inclusive)
 epa.loc[(epa.make == 'saturn') & (epa.model == 'l100/200') & (epa.year >= 2001), 'model_mod'] = 'ls1'
@@ -450,11 +559,20 @@ def mod_mercedes(s):
 vin.ix[vin_mercedes_index, 'model_mod'] = vin.ix[vin_mercedes_index, 'model_mod'].apply(mod_mercedes)
 epa.ix[(epa.make == 'mercedes-benz'), 'model_mod'] = \
 	epa.ix[(epa.make == 'mercedes-benz'), 'model_mod'].apply(mod_mercedes)
+### Drop all the letters at the end of a model with a number. 
+vin.loc[(vin.make == 'mercedes-benz') & (vin.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'], \
+epa.loc[(epa.make == 'mercedes-benz') & (epa.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'] = \
+	[df.loc[(df.make == 'mercedes-benz') & (df.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'].apply(
+		lambda s: re.sub(r'(.*\d)\D+.*', r'\1', s)) for df in (vin, epa)]
 ## Toyota. 
 vin.ix[vin.make == 'scion', ['model', 'model_mod']] = \
 	vin.ix[vin.make == 'scion', 'model_mod'].apply(lambda x: x.split(' ')[1] if len(x.split(' '))>1 else x)
 epa.ix[epa.model == 'camry solara', 'model_mod'] = 'solara'
 vin.ix[vin.model.str.contains('4-runner'), 'model_mod'] = '4runner'
+epa.loc[(epa.make == 'toyota'), 'model_mod'] = \
+	epa.loc[(epa.make == 'toyota'), 'model_mod'].replace('truck', 'pickup', regex=True)
+vin.loc[(vin.make == 'toyota') & (vin.model == 'camry') & (vin.year == 2002) & (vin.displ_mod == '2.2'),
+	'displ_mod'] = '2.4'
 ## Mazda.
 def delete_mazda(s):
 	match = re.match('mazda(.*)', s)
@@ -493,18 +611,26 @@ ind = epa.ix[(epa.make.isin(['chevrolet', 'dodge'])) & (epa.model_mod.str.contai
 epa.ix[ind, 'model_mod'] = epa.ix[ind, 'model_mod'].str.extract(pattern)
 ind = vin.ix[(vin.make.isin(['chevrolet', 'dodge'])) & (vin.model_mod.str.contains(pattern)), 'model_mod'].index
 vin.ix[ind, 'model_mod'] = vin.ix[ind, 'model_mod'].str.extract(pattern)
-## Keep only first word of the model. 
-epa['model_mod'] = epa['model_mod'].apply(lambda x: x.strip().split(' ')[0].split('-')[0])
-vin['model_mod'] = vin['model_mod'].apply(lambda x: x.strip().split(' ')[0].split('-')[0])
+
+# Keep only first word of the model. 
+epa['model_mod'], vin['model_mod'] = [
+	df['model_mod'].apply(lambda x: x.strip().split(' ')[0].split('-')[0]) for df in epa, vin] 
 
 # Reset index.
 vin = vin.reset_index(drop=True)
 epa = epa.reset_index(drop=True)
 
 ######################################################################################################################
-# Merge databases. 
+# Merge datasets. 
 ######################################################################################################################
-def merge(n_var_left=4):
+def comb_list(l):
+	out = []
+	for n in range(len(l), 0, -1):
+		combs = combinations(l, n)
+		out += map(list, combs)
+	return out
+
+def merge(n_var_left=4, keep_epa_models=False):
 	"""
 	Args:
 		n_var_left: number of variables to keep at the top of the list for the merge (variables that won't be dropped). 
@@ -522,16 +648,21 @@ def merge(n_var_left=4):
 	missing_val_cols = [
 		'displ_mod',
 		'cylinders',
+		'transmission_type_mod',
+		'transmission_speeds_mod',
 		]
 
-	match_col_list = [missing_val_cols] + [[x] for x in missing_val_cols]
+	match_col_list = comb_list(missing_val_cols)
 	matched_vins = pd.DataFrame(columns=list(set(vin.columns.tolist() + epa.columns.tolist())) + ['matched_on'])
+	remaining_epas = epa if keep_epa_models else None
 	for col_list in match_col_list:
 		on_cols = no_missing_val_cols + col_list
 		remaining_vins = vin.loc[~vin.VIN_ID.isin(matched_vins.VIN_ID)]
+		# Make sure we don't match on the missing values. 
 		remaining_vins = remaining_vins.loc[reduce(operator.and_, [(remaining_vins[x] != '-1') for x in on_cols])]
-		remaining_epas = epa.loc[~epa.EPA_ID.isin(matched_vins.EPA_ID)]
-		remaining_epas = remaining_epas.loc[reduce(operator.and_, [(remaining_epas[x] != '-1') for x in on_cols])]
+		if not keep_epa_models:
+			remaining_epas = epa.loc[~epa.EPA_ID.isin(matched_vins.EPA_ID)]
+			remaining_epas = remaining_epas.loc[reduce(operator.and_, [(remaining_epas[x] != '-1') for x in on_cols])]
 		inner_join = pd.merge(remaining_vins.reset_index(), remaining_epas, how='inner', on=on_cols).set_index('index')
 		inner_join['matched_on'] = len(on_cols)
 		matched_vins = pd.concat([inner_join, matched_vins])
@@ -540,14 +671,15 @@ def merge(n_var_left=4):
 	for _ in range(len(no_missing_val_cols) - n_var_left):
 		on_cols = on_cols[:-1]
 		remaining_vins = vin.loc[~vin.VIN_ID.isin(matched_vins.VIN_ID)]
-		remaining_epas = epa.loc[~epa.EPA_ID.isin(matched_vins.EPA_ID)]
+		if not keep_epa_models:
+			remaining_epas = epa.loc[~epa.EPA_ID.isin(matched_vins.EPA_ID)]
 		inner_join = pd.merge(remaining_vins.reset_index(), remaining_epas, how='inner', on=on_cols).set_index('index')
 		inner_join['matched_on'] = len(on_cols)
 		matched_vins = pd.concat([inner_join, matched_vins])
 
 	return matched_vins
 
-matched_vins = merge()
+matched_vins = merge(3, keep_epa_models=True)
 
 matched_vins_ids = matched_vins[['VIN_ID', 'EPA_ID', 'matched_on']]
 
@@ -557,7 +689,8 @@ epa_epa = epa.rename(columns = dict(zip(epa.columns, epa.columns + '_epa')))
 matched_vins_simple = pd.merge(pd.merge(matched_vins_ids, vin_vin, left_on='VIN_ID', right_on='VIN_ID_vin', how='left'), 
 	epa_epa, left_on='EPA_ID', right_on='EPA_ID_epa', how='left')
 matched_vins_simple.drop(['EPA_ID', 'VIN_ID'], axis=1, inplace=True)
-matched_vins_no_dupes = matched_vins_simple.sort_values('comb08_epa', ascending=True).drop_duplicates(subset='VIN_vin')
+matched_vins_no_dupes = matched_vins_simple.sort_values(['comb08_epa', 'transmission_type_mod_vin'], ascending=True
+	).drop_duplicates(subset='VIN_vin')
 vins_no_dupes = vin_vin.drop_duplicates(subset='VIN_vin')
 print('Merge fraction weighted: {:.2%}'.format(float(matched_vins_no_dupes['counts_vin'].sum())/
 	vins_no_dupes['counts_vin'].sum()))
@@ -585,19 +718,33 @@ for n in n_range:
 ######################################################################################################################
 # Missing cylinders or displacements. 
 ######################################################################################################################
-vin.loc[(vin.displ_mod == "-1") | (vin.cylinders == "-1")].to_csv('missing_cylinders_or_displacement_2.csv')
-missing_data_VIN_ID = vin.loc[(vin.displ_mod == "-1") | (vin.cylinders == "-1"), 'VIN_ID']
-matched_vins_simple.loc[matched_vins_simple.VIN_ID_vin.isin(missing_data_VIN_ID)].to_csv('missing_data_check.csv')
+# missing_data_VIN_ID = vin.loc[((vin.displ_mod == "-1") | (vin.cylinders == "-1")) & (vin.counts >= 500), 'VIN_ID']
+# missing_data_check = matched_vins_simple.loc[matched_vins_simple.VIN_ID_vin.isin(missing_data_VIN_ID)]
+# missing_data_check.to_csv('missing_data_check.csv')
+# select_cols = 'VIN_ID_vin, displ_mod_vin, displ_mod_epa, cylinders_vin, cylinders_epa'.split(', ')
+# missing_data_no_dupes = missing_data_check.drop_duplicates(subset=select_cols)
+# manual = pd.read_csv('manual_cylinders_or_displacement.csv')
+# # manual = manual[:432]
+# data_comp = pd.merge(missing_data_no_dupes, manual, left_on='VIN_vin', right_on='VIN', how='left')
+# out_cols = select_cols + 'VIN_vin, displ_mod, cylinders, counts, NEW DISPL, NEW CYL, Notes'.split(', ')
+# data_comp[out_cols].to_csv('missing_cyl_displ_comparison.csv')
+
+# manual.loc[~manual.VIN.isin(missing_data_no_dupes.VIN_vin)]
+
 ######################################################################################################################
 # Generate output files. 
 ######################################################################################################################
-vins_matched = matched_vins_simple.VIN_ID_vin
-epas_matched = matched_vins_simple.EPA_ID_epa
-# Not matched vins.
-not_matched_vins = vin_vin.loc[~vin_vin.VIN_ID_vin.isin(vins_matched)]
-not_matched_epas = epa_epa.loc[~epa_epa.EPA_ID_epa.isin(epas_matched)]
-not_matched = pd.concat([not_matched_epas, not_matched_vins])
-# Both.
+# Create simple matched file. 
+matched_vins_simple.to_csv('matched_vins.csv', encoding = 'utf8')
+
+# Find the VINs that weren't matched. 
+vins_matched = matched_vins_simple.VIN_vin
+epas_matched = matched_vins_simple.EPA_epa
+not_matched_vins_ = vin_vin.loc[~vin_vin.VIN_vin.isin(vins_matched)]
+not_matched_epas_ = epa_epa.loc[~epa_epa.EPA_epa.isin(epas_matched)]
+not_matched = pd.concat([not_matched_epas_, not_matched_vins_])
+
+# Create a dataset with all records and export it.
 all_records = pd.concat([not_matched, matched_vins_simple])
 all_records_no_dupes = pd.concat([not_matched, matched_vins_no_dupes])
 ordered_cols = [
@@ -652,12 +799,31 @@ ordered_cols = [
 # Create csv files. 
 all_records[ordered_cols].to_csv('all_records.csv', encoding='utf8')
 all_records_no_dupes[ordered_cols].to_csv('all_records_no_dupes.csv', encoding='utf8')
-matched_vins_simple.to_csv('matched_vins_new.csv', encoding = 'utf8')
 
-not_matched_vins_for_comparison = vin.loc[~vin.VIN_ID.isin(vins_matched)]
-not_matched_epas_for_comparison = epa.loc[~epa.EPA_ID.isin(epas_matched)]
+# Create an ignore list for the vin dataset. 
+## Turn type into int. 
+not_matched_vins = vin.loc[~vin.VIN.isin(vins_matched)]
+not_matched_vins.type = not_matched_vins.type.apply(int)
+ignore_vins = pd.Series()
+ignore_vins = pd.concat([ignore_vins, 
+	not_matched_vins.loc[
+		(not_matched_vins.make == 'ford') & 
+		(not_matched_vins.model_mod.str.contains('f250|f350|e150|e250|e350|excursion')), 'VIN']])
+ignore_vins = pd.concat([ignore_vins, 
+	not_matched_vins.loc[(not_matched_vins.make == 'dodge') & (not_matched_vins.type >= 15), 'VIN']])
+ignore_vins = pd.concat([ignore_vins, 
+	not_matched_vins.loc[(not_matched_vins.make == 'chevrolet') & (not_matched_vins.type >= 25), 'VIN']])
+
+# Create a file to track the records that weren't matched. 
+not_matched_vins_for_comparison = vin.loc[~vin.VIN.isin(pd.concat([vins_matched, ignore_vins]))]
+not_matched_epas_for_comparison = epa.loc[~epa.EPA.isin(epas_matched)]
 not_matched_for_comparison = pd.concat([not_matched_epas_for_comparison, 
 	not_matched_vins_for_comparison])
+
+# Matching rate. 
+print('Merge fraction weighted: {:.2%}'.format(
+	float(vins_no_dupes.counts_vin.sum() - not_matched_vins_for_comparison.counts.sum())/
+	vins_no_dupes.counts_vin.sum()))
 
 not_matched_out = not_matched_for_comparison[[
 	'make',
@@ -699,6 +865,43 @@ clear_use_range(out_wb, 'vin_only')
 out_wb.sheets('vin_only').range(1, 1).value = not_matched_vins_for_comparison
 
 ######################################################################################################################
+# Missing fuel efficiency data. 
+######################################################################################################################
+
+# * MISSING IN EPA FEG?;
+# IF ERG_MODEL='Sebring' AND EPA_CYL=6 AND CITY08=. THEN DO;
+# IF ERG_MY=2001 THEN DO; CITY08=17; HIGHWAY08=25; COMB08=20; END;
+# IF ERG_MY=2003 THEN DO; CITY08=19; HIGHWAY08=25; COMB08=21; END;
+# IF 2004 LE ERG_MY LE 2005 THEN DO; CITY08=18; HIGHWAY08=25; COMB08=21; END;
+# IF 2007 LE ERG_MY LE 2011 THEN DO; CITY08=16; HIGHWAY08=27; COMB08=20; END;
+# END;
+
+# IF ERG_MODEL='Impala' THEN DO;
+# IF ERG_MY=2006 THEN DO; EPA_CYL=6; EPA_DISP=3.5; CITY08=17; HIGHWAY08=25; COMB08=20; END;
+# IF ERG_MY=2011 AND EPA_CYL=6 AND EPA_DISP=3.5 THEN DO; CITY08=18; HIGHWAY08=29; COMB08=22; END;
+# IF ERG_MY=2011 AND EPA_CYL=6 AND EPA_DISP=3.9 THEN DO; CITY08=17; HIGHWAY08=25; COMB08=20; END;
+# END;
+
+# add the mpg of models that are missing based on the ones that exist already for the heavy ones. 
+# Based on tonnage, year, van vs. truck. 
+heavy_vins = vin.loc[vin.VIN.isin(ignore_vins)]
+heavy_mpgs = pd.merge(heavy_vins, epa, on='make, model'.split(', ')).drop_duplicates(subset='VIN')
+
+keep_cols = [x for x in epa.columns if re.match('.*08.*', x)]
+on_vars = 'type, year, vtyp3'.split(', ')
+min_lookup = epa.groupby(on_vars)[keep_cols].min().reset_index()
+
+for _ in range(3):
+	heavy_left = heavy_vins.loc[~heavy_vins.VIN.isin(heavy_mpgs.VIN)]
+	heavy_mpgs = pd.concat([heavy_mpgs, pd.merge(heavy_left, min_lookup, on=on_vars)])
+	on_vars = on_vars[:-1]
+
+heavy_mpgs = heavy_mpgs.sort_values('comb08', ascending=True).drop_duplicates(subset='VIN')
+
+# heavy_vins.loc[~heavy_vins.VIN.isin(heavy_mpgs.VIN)].make.unique()
+heavy_mpgs.to_csv('heavy.csv')
+
+######################################################################################################################
 # MPG range distribution.
 ######################################################################################################################
 # Create the ranges of values for each VIN. 
@@ -710,7 +913,15 @@ matched_vins_ranges.columns = map('_'.join, zip(matched_vins_ranges.columns.get_
 	matched_vins_ranges.columns.get_level_values(1).tolist()))
 matched_vins_ranges.reset_index(inplace=True)
 # Add counts. 
-matched_vins_ranges = pd.merge(matched_vins_ranges, vins_no_dupes[['counts_vin', 'VIN_ID_vin']])
+matched_vins_ranges = pd.merge(matched_vins_ranges, vin_vin[['VIN_vin', 'VIN_ID_vin', 'counts_vin']])
+matched_vins_ranges_out = pd.merge(matched_vins_ranges, matched_vins_no_dupes[[
+	'VIN_ID_vin', 'VIN_vin', 'year_vin', 'make_vin', 'model_vin', 'model_epa', 'fuelType1_vin', 'fuelType1_epa',
+	'displ_mod_vin', 'displ_mod_epa', 'cylinders_vin', 'cylinders_epa']], 
+	on = 'VIN_vin')
+
+matched_vins_ranges_out['comb08_max_min%'] = matched_vins_ranges_out['comb08_epa_max'] / matched_vins_ranges_out['comb08_epa_min']
+matched_vins_ranges_out.loc[(matched_vins_ranges_out['comb08_max_min%'] >= 1.20) & (matched_vins_ranges_out['counts_vin'] >= 500)
+	].to_csv('large_spreads_and_counts.csv')
 
 ######################################################################################################################
 # Spread distribution.
@@ -736,6 +947,8 @@ matched_vins_ranges.to_csv('duplicate_ranges.csv')
 ######################################################################################################################
 # Summary.
 ######################################################################################################################
+
+# Create a summary.
 vin_out = matched_vins_no_dupes[vin_vin.columns.tolist() + ['matched_on']]
 keep_cols = ['VIN_ID_vin', 'highway08_epa_min', 'comb08_epa_min', 'city08_epa_min', 'highway08_spread',
 	'city08_epa_count']
