@@ -1,3 +1,41 @@
+matched_vins_simple.loc[matched_vins_simple.VIN_vin == '4tarn81axrz298544', 
+	'EPA_ID_epa'.split(', ')]
+
+epa.loc[epa.EPA_ID == 1405]
+
+
+epa_original.loc[epa_original.make == 'chrysler', ['model', 'model_mod']].drop_duplicates().to_csv('epa_chrysler.csv')
+vin_original.loc[vin_original.make == 'chrysler', ['model', 'model_mod']].drop_duplicates().to_csv('epa_chrysler.csv')
+
+epa_original.loc[epa_original.model_mod == 'caravan grand caravan', ['make', 'model']]
+
+epa_original.loc[(epa_original.make == 'dodge') & epa_original.model.str.contains(r'/'), ['model', 'model_mod']].drop_duplicates()
+vin_original.loc[(vin_original.make == 'dodge') & vin_original.model.str.contains(r'c'), ['model', 'model_mod']].drop_duplicates()
+
+epa_original.loc
+
+
+
+
+index_mod = epa_original.loc[epa_original.model_mod.str.contains(pattern)].index
+epa_original.loc[index_mod, 'model_mod'].unique()
+
+ = \
+	epa_original.loc[index_mod, 'model_mod'].str.extract(pattern)
+
+
+vin_original.loc[vin_original.model.str.contains('new york'), 'model_mod'].unique()
+\
+vin_expanded.loc[(vin_expanded.model.str.contains(r' ')), ['model', 'model_mod', 'make']].drop_duplicates().to_csv('vin_models_with_spaces_2.csv')
+
+
+a = vin_original.loc[vin_original.model.str.contains(r'/'), 'model_mod'].unique()
+vin_expanded.loc[(vin_expanded.model.str.contains(r'lumina')) & (vin_expanded.make == 'chevrolet'), 'model_mod'].unique()
+vin_expanded.loc[(vin_expanded.model.str.contains(r'lumina')), 'model_mod'].unique()
+
+
+np.savetxt('vin_models_with_spaces.csv', a, delimiter=',', fmt='%5s')
+
 epa.loc[(epa.make == 'chrysler') & (epa.year == 1994), ['model', 'model_mod']]
  & (epa.model_mod.str.contains('lhs'))]
 
