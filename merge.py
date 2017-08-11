@@ -257,6 +257,7 @@ def load_data(vin_file=r'X:\EPA_MPG\vin_with_vtyp3.csv', epa_file=r'X:\EPA_MPG\e
 	## Delete all spaces from a subset of the makes. 
 	vin_original.loc[vin_original.make == 'buick', 'model_mod'] = \
 		vin_original.loc[vin_original.make == 'buick', 'model_mod'].replace(' ', '', regex=True)
+	vin_original.loc[(vin_original.make == 'buick') & (vin_original.model_mod == 'parkavenue'), 'model_mod'] = 'park'
 	# Replace all instances of pick-up with pickup.
 	vin_original['model_mod'] = vin_original.model_mod.str.replace('pick-up', 'pickup')
 
@@ -493,22 +494,22 @@ def mod_2(vin, epa):
 
 	# Modify makes. 
 	## Ram.
-	vin.ix[(vin.make == 'ram'), 'make'] = 'dodge'
-	epa.ix[(epa.make == 'ram'), 'make'] = 'dodge'
+	vin.loc[(vin.make == 'ram'), 'make'] = 'dodge'
+	epa.loc[(epa.make == 'ram'), 'make'] = 'dodge'
 	## Ford. 
-	epa.ix[(epa.make == 'ford') & (epa.model == 'escort zx2'), 'model_mod'] = 'zx2'
+	epa.loc[(epa.make == 'ford') & (epa.model == 'escort zx2'), 'model_mod'] = 'zx2'
 	## Chevrolet.
-	vin.ix[(vin.make == 'geo'), 'make'] = 'chevrolet'
-	epa.ix[(epa.make == 'geo'), 'make'] = 'chevrolet'
-	epa.ix[epa.make == 'gmc', 'make'] = 'chevrolet'
-	vin.ix[vin.make == 'gmc', 'make'] = 'chevrolet'
+	vin.loc[(vin.make == 'geo'), 'make'] = 'chevrolet'
+	epa.loc[(epa.make == 'geo'), 'make'] = 'chevrolet'
+	epa.loc[epa.make == 'gmc', 'make'] = 'chevrolet'
+	vin.loc[vin.make == 'gmc', 'make'] = 'chevrolet'
 	## Toyota. 
-	vin.ix[vin.model.str.contains('scion'), 'make'] = 'scion'
+	vin.loc[vin.model.str.contains('scion'), 'make'] = 'scion'
 	## Chrysler.
 	### Replace Chrysler with Dodge for model Caravan in VIN.
-	vin.ix[(vin.make == 'chrysler') & (vin.model_mod == 'caravan'), 'make'] = 'dodge'
+	vin.loc[(vin.make == 'chrysler') & (vin.model_mod == 'caravan'), 'make'] = 'dodge'
 	## Sprinter
-	vin.ix[(vin.make == 'sprinter (dodge or freightliner)'), 'make'] = 'dodge'
+	vin.loc[(vin.make == 'sprinter (dodge or freightliner)'), 'make'] = 'dodge'
 
 	# Modify models. 
 	# For Lexus models, drop the numbers. 
@@ -539,8 +540,8 @@ def mod_2(vin, epa):
 		epa.loc[(epa.make == 'nissan'), 'model_mod'].replace('truck', 'pickup', regex=True)
 	epa.loc[epa.model.str.contains('pathfinder armada'), 'model_mod']	= 'armada'
 	## BMW. 
-	epa.loc[(epa.make == 'bmw'), 'model_mod'] = \
-		epa.loc[(epa.make == 'bmw'), 'model_mod'].replace(' convertible', 'c', regex=True)
+	epa.loc[(epa.make == 'bmw'), 'model_mod'] = epa.loc[(epa.make == 'bmw'), 'model_mod'].apply(lambda s: s[0])
+	vin.loc[(vin.make == 'bmw'), 'model_mod'] = vin.loc[(vin.make == 'bmw'), 'model_mod'].apply(lambda s: s[0])
 	## Delete from EPA all models that contain chassis in model name. 
 	epa = epa.loc[~epa.model.str.contains('chassis')]
 	## All models with displacements in the model name, e.g. '190e 2.3-16'
@@ -567,32 +568,27 @@ def mod_2(vin, epa):
 		vin.loc[(vin.make == 'saturn') & (vin.model_mod != 'ls1'), 'model_mod'].apply(
 			lambda s: re.match(r'([^\d]+)[\d]', s).groups()[0] if re.match(r'([^\d]+)[\d]', s) else s)
 	## Mercedes. 
-	vin_mercedes_index = vin.loc[(vin.make == 'mercedes-benz') & (vin.Series != '-1'), 'Series'].index
-	vin.ix[vin_mercedes_index, 'model_mod'] = vin.ix[vin_mercedes_index, 'Series']
-	vin.ix[vin_mercedes_index, 'model_mod'] = \
-		vin.ix[vin_mercedes_index, 'model_mod'].str.replace('amg', '').str.strip()
-	epa.ix[(epa.make == 'mercedes-benz'), 'model_mod'] = \
-		epa.ix[(epa.make == 'mercedes-benz'), 'model_mod'].str.replace('amg', '').str.strip()
-	def mod_mercedes(s):
-		pattern = re.compile(r'.*?(\w*\d+\w*).*')
-		match = re.match(pattern, s)
-		if match:
-			return match.groups()[0]
-		else:
-			return re.findall(r'\w+', s)[0]
-	vin.ix[vin_mercedes_index, 'model_mod'] = vin.ix[vin_mercedes_index, 'model_mod'].apply(mod_mercedes)
-	epa.ix[(epa.make == 'mercedes-benz'), 'model_mod'] = \
-		epa.ix[(epa.make == 'mercedes-benz'), 'model_mod'].apply(mod_mercedes)
+	class_index = vin.loc[(vin.make == 'mercedes-benz') & (vin.model.str.contains(r'(?:\D+)-class'))].index
+	vin.loc[class_index, 'model_mod'] = vin.loc[class_index, 'model'].str.extract(r'(\D+)-class')
+	digit_class_index = vin.loc[(vin.make == 'mercedes-benz') & (vin.model.str.contains(r'(?:\d+)'))].index
+	vin.loc[digit_class_index, 'model_mod'] = \
+		vin.loc[digit_class_index, 'Series'].str.split(' ').apply(lambda xs: xs[0]).str.extract(r'.*?(\D+)')
+	vin.loc[(vin.make == 'mercedes-benz'), 'model_mod'], epa.loc[(epa.make == 'mercedes-benz'), 'model_mod'] = \
+		[df.loc[(df.make == 'mercedes-benz'), 'model_mod'].str.replace('amg', '').str.strip() for df in (vin, epa)]
+	epa.loc[epa.make == 'mercedes-benz', 'model_mod'] = \
+		epa.loc[epa.make == 'mercedes-benz', 'model_mod'].str.split(' ').apply(
+			lambda xs: xs[0] if re.match(r'.*?\D', xs[0]) else xs[1]).str.extract(r'(\D+)')
+	vin.loc[(vin.make == 'mercedes-benz') & (vin.model_mod == 'm'), 'model_mod'] = 'ml'
 	### Drop all the letters at the end of a model with a number. 
-	vin.loc[(vin.make == 'mercedes-benz') & (vin.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'], \
-	epa.loc[(epa.make == 'mercedes-benz') & (epa.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'] = \
-		[df.loc[(df.make == 'mercedes-benz') & (df.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'].apply(
-			lambda s: re.sub(r'(.*\d)\D+.*', r'\1', s)) for df in (vin, epa)]
+	# vin.loc[(vin.make == 'mercedes-benz') & (vin.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'], \
+	# epa.loc[(epa.make == 'mercedes-benz') & (epa.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'] = \
+	# 	[df.loc[(df.make == 'mercedes-benz') & (df.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'].apply(
+	# 		lambda s: re.sub(r'(.*\d)\D+.*', r'\1', s)) for df in (vin, epa)]
 	## Toyota. 
-	vin.ix[vin.make == 'scion', ['model', 'model_mod']] = \
-		vin.ix[vin.make == 'scion', 'model_mod'].apply(lambda x: x.split(' ')[1] if len(x.split(' '))>1 else x)
-	epa.ix[epa.model == 'camry solara', 'model_mod'] = 'solara'
-	vin.ix[vin.model.str.contains('4-runner'), 'model_mod'] = '4runner'
+	vin.loc[vin.make == 'scion', ['model', 'model_mod']] = \
+		vin.loc[vin.make == 'scion', 'model_mod'].apply(lambda x: x.split(' ')[1] if len(x.split(' '))>1 else x)
+	epa.loc[epa.model == 'camry solara', 'model_mod'] = 'solara'
+	vin.loc[vin.model.str.contains('4-runner'), 'model_mod'] = '4runner'
 	epa.loc[(epa.make == 'toyota'), 'model_mod'] = \
 		epa.loc[(epa.make == 'toyota'), 'model_mod'].replace('truck', 'pickup', regex=True)
 	vin.loc[(vin.make == 'toyota') & (vin.model == 'camry') & (vin.year == 2002) & (vin.displ_mod == '2.2'),
@@ -604,37 +600,31 @@ def mod_2(vin, epa):
 			return match.groups()[0]
 		else:
 			return s
-	vin.ix[vin['make'] == 'mazda', 'model_mod'] = \
-		vin.ix[vin['make'] == 'mazda', 'model_mod'].apply(delete_mazda)
-	epa.ix[(epa.make == 'mazda') & (epa.model_mod.str.contains('^b\d')), 'model_mod'] = \
-		epa.ix[(epa.make == 'mazda') & (epa.model_mod.str.contains('^b\d')), 'model_mod'].apply(lambda x: x[0])
+	vin.loc[vin['make'] == 'mazda', 'model_mod'] = \
+		vin.loc[vin['make'] == 'mazda', 'model_mod'].apply(delete_mazda)
+	epa.loc[(epa.make == 'mazda') & (epa.model_mod.str.contains('^b\d')), 'model_mod'] = \
+		epa.loc[(epa.make == 'mazda') & (epa.model_mod.str.contains('^b\d')), 'model_mod'].apply(lambda x: x[0])
 	## John Cooper Works. 
-	pattern = re.compile('john cooper works(.*)')
-	epa['model_mod'] = epa['model_mod'].apply(
-		lambda x: 'jcw'+pattern.match(x).groups()[0] if(pattern.match(x)) else x)
+	epa.loc[epa.model_mod.str.contains('john cooper works(.*)'), 'model_mod'] = 'jcw'
 	## Chevrolet.
-	## Get rid of anything like s10 from the name of the model. 
-	# epa.ix[(epa.make == 'chevrolet') & (epa.model_mod.str.contains(r'.*?(\s|^)([^\d]+)(\s|$)')), 'model_mod'] = \
-	# 	epa.ix[(epa.make == 'chevrolet') & (epa.model_mod.str.contains(r'.*?(\s|^)([^\d]+)(\s|$)')), 'model_mod'].apply(
-	# 		lambda x: re.match(r'.*?(\s|^)([^\d]+)(\s|$)', x).groups()[1])
 	### s10 models. 
-	epa.ix[(epa.make == 'chevrolet') & (epa.model.str.contains('(^|\s)blazer($|\s)')), 'model_mod'] = 'blazer'
-	vin.ix[(vin.make == 'chevrolet') & (vin.model.str.contains('(^|\s)blazer($|\s)')), 'model_mod'] = 'blazer'
-	epa.ix[(epa.make == 'chevrolet') & (epa.model.str.contains('suburban')), 'model_mod'] = 'suburban'
-	vin.ix[(vin.make == 'chevrolet') & (vin.model.str.contains('suburban')), 'model_mod'] = 'suburban'
-	epa.ix[(epa.make == 'chevrolet') & (epa.model.str.contains('s10|s-10')), 'model_mod'] = 's'
-	vin.ix[(vin.make == 'chevrolet') & (vin.model.str.contains('s10|s-10')), 'model_mod'] = 's'
+	epa.loc[(epa.make == 'chevrolet') & (epa.model.str.contains('(^|\s)blazer($|\s)')), 'model_mod'] = 'blazer'
+	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains('(^|\s)blazer($|\s)')), 'model_mod'] = 'blazer'
+	epa.loc[(epa.make == 'chevrolet') & (epa.model.str.contains('suburban')), 'model_mod'] = 'suburban'
+	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains('suburban')), 'model_mod'] = 'suburban'
+	epa.loc[(epa.make == 'chevrolet') & (epa.model.str.contains('s10|s-10')), 'model_mod'] = 's'
+	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains('s10|s-10')), 'model_mod'] = 's'
 	### Geo Metro model. 
-	vin.ix[(vin.make == 'chevrolet') & (vin.model.str.contains('geo metro')), 'model_mod'] = 'metro'
+	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains('geo metro')), 'model_mod'] = 'metro'
 	### Replace gmt-400 with c when drive_mod = 2 and with k otherwise. 
-	vin.ix[(vin.make == 'chevrolet') & (vin.model == 'gmt-400') & (vin.drive_mod == 'two'), 'model_mod'] = 'c'
-	vin.ix[(vin.make == 'chevrolet') & (vin.model == 'gmt-400') & (vin.drive_mod == 'all'), 'model_mod'] = 'k'
+	vin.loc[(vin.make == 'chevrolet') & (vin.model == 'gmt-400') & (vin.drive_mod == 'two'), 'model_mod'] = 'c'
+	vin.loc[(vin.make == 'chevrolet') & (vin.model == 'gmt-400') & (vin.drive_mod == 'all'), 'model_mod'] = 'k'
 	### Replace '^\D\d' with the first letter. 
 	pattern = r'^(\D+)\s*\d+'
-	ind = epa.ix[(epa.make.isin(['chevrolet', 'dodge'])) & (epa.model_mod.str.contains(pattern)), 'model_mod'].index
-	epa.ix[ind, 'model_mod'] = epa.ix[ind, 'model_mod'].str.extract(pattern)
-	ind = vin.ix[(vin.make.isin(['chevrolet', 'dodge'])) & (vin.model_mod.str.contains(pattern)), 'model_mod'].index
-	vin.ix[ind, 'model_mod'] = vin.ix[ind, 'model_mod'].str.extract(pattern)
+	ind = epa.loc[(epa.make.isin(['chevrolet', 'dodge'])) & (epa.model_mod.str.contains(pattern)), 'model_mod'].index
+	epa.loc[ind, 'model_mod'] = epa.loc[ind, 'model_mod'].str.extract(pattern)
+	ind = vin.loc[(vin.make.isin(['chevrolet', 'dodge'])) & (vin.model_mod.str.contains(pattern)), 'model_mod'].index
+	vin.loc[ind, 'model_mod'] = vin.loc[ind, 'model_mod'].str.extract(pattern)
 
 	# Keep only first word of the model. 
 	epa['model_mod'], vin['model_mod'] = [
@@ -868,7 +858,7 @@ def create_plots():
 	ax.legend()
 	plt.show()
 
-def main(export=False):
+def main(export=False, load_from_file=True):
 	# global vin_raw, epa_raw, vin_original, epa_original, vin_1, epa_1, vin, epa, \
 	# 	matched_vins_simple, matched_vins_groups, vins_matched, ignore_vins
 
@@ -877,19 +867,20 @@ def main(export=False):
 	######################################################################################################################
 	print('Loading datasets')
 	# Generates vin_raw, epa_raw, vin_original, epa_original.
-	vin_original, epa_original = load_data()
+	if load_from_file:
+		vin_original, epa_original = pd.read_csv('vin_original.csv'), pd.read_csv('epa_original.csv')
+	else:
+		vin_original, epa_original = load_data()
+		vin_original.to_csv('vin_original.csv')
+		epa_original.to_csv('epa_original.csv')
 
 	# Modify the basics.
 	print('Modifying datasets (round 1)')
-	vin_1 = vin_original.copy()
-	epa_1 = epa_original.copy()
-	vin_1, epa_1 = mod_1(vin_1, epa_1)
+	vin_1, epa_1 = mod_1(vin_original, epa_original)
 
 	# Modify makes, models, etc.
 	print('Modifying datasets (round 2)')
-	vin = vin_1.copy()
-	epa = epa_1.copy()
-	vin, epa = mod_2(vin, epa)
+	vin, epa = mod_2(vin_1, epa_1)
 
 	######################################################################################################################
 	# Merge datasets. 
@@ -1054,7 +1045,7 @@ def main(export=False):
 	matched_vins_ranges['comb08_max-min%'] = \
 		matched_vins_ranges['comb08_epa_max'] / matched_vins_ranges['comb08_epa_min']
 	matched_vins_ranges.loc[(matched_vins_ranges['comb08_max-min%'] >= 1.20) & 
-		(matched_vins_ranges['counts_vin'] >= 500)].to_csv('large_spreads_and_counts.csv')
+		(matched_vins_ranges['counts_vin'] >= 500)].to_csv('large_spreads_and_counts_2.csv')
 	matched_vins_ranges.to_csv('duplicate_ranges.csv')
 
 	######################################################################################################################
@@ -1072,6 +1063,7 @@ def main(export=False):
 		spread[mpg + '_spread%'] = spread[mpg + '_spread']/spread[mpg + '_spread'].sum()
 		spread[mpg + '_spread%_cum'] = spread[mpg + '_spread%'].cumsum()
 	spread.to_csv('spread.csv') 
+	matched_vins_ranges.groupby('make_vin')['make_vin, comb08_spread'.split(', ')].describe().unstack().to_csv('spread_by_make.csv')
 
 	######################################################################################################################
 	# Summary.
