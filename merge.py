@@ -1,3 +1,5 @@
+# -*- encoding : utf-8 -*-
+
 import xlwings as xw
 import pandas as pd
 import re
@@ -7,15 +9,14 @@ from math import isnan
 import numpy as np
 import matplotlib.pyplot as plt
 from itertools import combinations
+from collections import OrderedDict
+
 import warnings
 warnings.filterwarnings('ignore')
 
 def load_data(vin_file=r'X:\EPA_MPG\vin_with_vtyp3.csv', epa_file=r'X:\EPA_MPG\epa_data.csv', init_yr=1991, last_yr=np.inf):
-	epa_raw = pd.read_csv(epa_file, encoding='utf8', dtype=unicode)
-	vin_raw = pd.read_csv(vin_file, encoding='utf8', dtype=unicode)
-
-	epa_original = epa_raw.copy()
-	vin_original = vin_raw.copy()
+	epa_original = pd.read_csv(epa_file, encoding='utf8', dtype=unicode)
+	vin_original = pd.read_csv(vin_file, encoding='utf8', dtype=unicode)
 
 	# Fix errors in the datasets. 
 	vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & (vin_original.Model == 'Expedition')
@@ -140,23 +141,7 @@ def load_data(vin_file=r'X:\EPA_MPG\vin_with_vtyp3.csv', epa_file=r'X:\EPA_MPG\e
 	vin_original, epa_original = [df.loc[~(df.fuelType1.str.contains('ffv|flexible|ethanol|e85|natural gas')) &
 		~(df.model.str.contains('ffv|flexible|ethanol|e85|natural gas'))] 
 		for df in (vin_original, epa_original)]
-	epa_original.drop(epa_original.atvType.str.contains('bi|ffv'), inplace=True)
-
-	# Modify fuel types to account for electric vehicles. 
-	def mod_electric_vehicles(df):
-		df.loc[df.model.str.contains('plug') |
-			((df.fuelType1.str.contains('gasoline'))	 & (df.fuelType1.str.contains('electric'))) |
-			((df.fuelType1.str.contains('gasoline')) & (df.fuelType2.str.contains('electric'))), 
-			'fuelType1'] = 'phev'
-		df.loc[(df.model.str.contains('(hev|hybrid)')), 'fuelType1'] = 'hev'
-		df.loc[(df.model.str.contains('bev')) | (df.model.str.contains('electric')) | 
-			(df.fuelType1.str.contains('electric')), 'fuelType1'] = 'bev'
-		return df
-	vin_original = mod_electric_vehicles(vin_original)
-	epa_original = mod_electric_vehicles(epa_original)
-	ev_dict = {'hybrid': 'hev', 'plug-in hybrid': 'phev'}
-	for k, v in ev_dict.items():
-		epa_original.loc[epa_original.atvType == k, 'fuelType1'] = v 
+	epa_original.drop(epa_original.loc[epa_original.atvType.str.contains('bi|ffv')].index, inplace=True)
 
 	mapping = {
 		'vin': {
@@ -218,6 +203,21 @@ def load_data(vin_file=r'X:\EPA_MPG\vin_with_vtyp3.csv', epa_file=r'X:\EPA_MPG\e
 		for item in mapping[df_name]:
 			df[item + '_mod'] = df[item]
 			df[item + '_mod'] = df[item].replace(mapping[df_name][item])
+
+	# Modify fuel types to account for electric vehicles. 
+	def mod_electric_vehicles(df):
+		df.loc[(df.model.str.contains('plug|volt')) | 
+			((df.fuelType1.str.contains('electric')) & (df.fuelType2.str.contains('gasoline'))),
+			'fuelType1_mod'] = 'phev'
+		df.loc[((df.fuelType1.str.contains('gasoline')) & (df.fuelType2.str.contains('electric'))) |
+			(df.model.str.contains('(hev|hybrid)')), 'fuelType1_mod'] = 'hev'
+		df.loc[(df.model.str.contains('bev')) | (df.model.str.contains('electric')) | 
+			(df.fuelType1.str.contains('electric')), 'fuelType1_mod'] = 'bev'
+		return df
+	vin_original = mod_electric_vehicles(vin_original)
+	ev_dict = {'hybrid': 'hev', 'plug-in hybrid': 'phev', 'ev': 'bev'}
+	for k, v in ev_dict.items():
+		epa_original.loc[epa_original.atvType == k, 'fuelType1_mod'] = v 
 
 	# Make years ints.
 	epa_original.year = epa_original.year.apply(int)
@@ -512,6 +512,9 @@ def mod_2(vin, epa):
 	vin.loc[(vin.make == 'sprinter (dodge or freightliner)'), 'make'] = 'dodge'
 
 	# Modify models. 
+	# Cadillac. 
+	vin.loc[(vin.make == 'cadillac') & (vin.model.str.contains('xts')) & vin.Series.str.contains('livery'), 'model_mod'] = 'xtslimo'
+	epa.loc[(epa.make == 'cadillac') & (epa.model.str.contains('(?=.*xts.*)(?=.*(limo|hearse).*)')), 'model_mod'] = 'xtslimo'
 	# For Lexus models, drop the numbers. 
 	epa.loc[(epa.make == 'lexus') & (epa.model_mod.str.contains(r'(?:gs|sc)\d+')), 'model_mod'] = \
 		epa.loc[(epa.make == 'lexus') & (epa.model_mod.str.contains(r'(?:gs|sc)\d+')), 'model_mod'].str.extract(r'(\D+)\d+')
@@ -585,9 +588,13 @@ def mod_2(vin, epa):
 	# 	[df.loc[(df.make == 'mercedes-benz') & (df.model_mod.str.contains(r'.*\d\D+.*')), 'model_mod'].apply(
 	# 		lambda s: re.sub(r'(.*\d)\D+.*', r'\1', s)) for df in (vin, epa)]
 	## Toyota. 
+	vin.loc[vin.model.str.contains('prius (?:c|v)'), 'model'] = \
+		vin.loc[vin.model.str.contains('prius (?:c|v)'), 'model'].apply(lambda s: s.replace(' ', ''))
+	epa.loc[epa.model.str.contains('prius (?:c|v)'), 'model'] = \
+		epa.loc[epa.model.str.contains('prius (?:c|v)'), 'model'].apply(lambda s: s.replace(' ', ''))
 	vin.loc[vin.make == 'scion', ['model', 'model_mod']] = \
 		vin.loc[vin.make == 'scion', 'model_mod'].apply(lambda x: x.split(' ')[1] if len(x.split(' '))>1 else x)
-	epa.loc[epa.model == 'camry solara', 'model_mod'] = 'solara'
+	epa.loc[epa.model.str.contains('solara'), 'model_mod'] = 'solara'
 	vin.loc[vin.model.str.contains('4-runner'), 'model_mod'] = '4runner'
 	epa.loc[(epa.make == 'toyota'), 'model_mod'] = \
 		epa.loc[(epa.make == 'toyota'), 'model_mod'].replace('truck', 'pickup', regex=True)
@@ -604,8 +611,26 @@ def mod_2(vin, epa):
 		vin.loc[vin['make'] == 'mazda', 'model_mod'].apply(delete_mazda)
 	epa.loc[(epa.make == 'mazda') & (epa.model_mod.str.contains('^b\d')), 'model_mod'] = \
 		epa.loc[(epa.make == 'mazda') & (epa.model_mod.str.contains('^b\d')), 'model_mod'].apply(lambda x: x[0])
-	## John Cooper Works. 
-	epa.loc[epa.model_mod.str.contains('john cooper works(.*)'), 'model_mod'] = 'jcw'
+	## Mini. 
+	### John Cooper Works. 
+	jcw_index = epa.loc[epa.model_mod.str.contains('john cooper works')].index
+	epa.loc[jcw_index, 'model_mod'] = \
+		epa.loc[jcw_index, 'model_mod'].str.extract('john cooper works(.*)').apply(lambda s: 'jcw'+s)
+	### Others. 
+	def take_out(s):
+		replace_list = 'gp-2, \\bgp\\b, coupe, kit, \(.*\), all4, \\b2\\b, \\b4\\b, door'.split(', ')
+		default_str = ''
+		replace_dict = OrderedDict(zip(replace_list, [default_str]*len(replace_list)))
+		for k, v in replace_dict.items(): 
+			s = re.sub(k, v, s).strip()
+		return s
+	mapping = {
+		'clubman s': u'cooper s clubman',
+		'clubman': u'cooper clubman',
+		'cooper clubvan': u'cooper clubman',
+	}
+	vin.loc[vin.make == 'mini', 'model_mod'], epa.loc[epa.make == 'mini', 'model_mod'] = \
+		[df.loc[df.make == 'mini', 'model_mod'].apply(take_out).replace(mapping).apply(lambda s: s.replace(' ', '')) for df in (vin, epa)]
 	## Chevrolet.
 	### s10 models. 
 	epa.loc[(epa.make == 'chevrolet') & (epa.model.str.contains('(^|\s)blazer($|\s)')), 'model_mod'] = 'blazer'
@@ -730,7 +755,7 @@ def get_ignore():
 	ignore_vins = pd.concat([ignore_vins, 
 		not_matched_vins.loc[
 			(not_matched_vins.make == 'ford') & 
-			(not_matched_vins.model_mod.str.contains('f250|f350|e150|e250|e350|excursion')), 'VIN']])
+			(not_matched_vins.model_mod.str.contains('f250|f350|e150|e250|e350|excursion|expedition')), 'VIN']])
 	ignore_vins = pd.concat([ignore_vins, 
 		not_matched_vins.loc[(not_matched_vins.make == 'dodge') & (not_matched_vins.type >= 15), 'VIN']])
 	ignore_vins = pd.concat([ignore_vins, 
@@ -858,7 +883,7 @@ def create_plots():
 	ax.legend()
 	plt.show()
 
-def main(export=False, load_from_file=True):
+def main(export=False, load_from_file=False):
 	# global vin_raw, epa_raw, vin_original, epa_original, vin_1, epa_1, vin, epa, \
 	# 	matched_vins_simple, matched_vins_groups, vins_matched, ignore_vins
 
@@ -871,7 +896,7 @@ def main(export=False, load_from_file=True):
 		vin_original, epa_original = pd.read_csv('vin_original.csv'), pd.read_csv('epa_original.csv')
 	else:
 		vin_original, epa_original = load_data()
-		vin_original.to_csv('vin_original.csv')
+		vin_original.to_csv('vin_original.csv', encoding='utf-8')
 		epa_original.to_csv('epa_original.csv')
 
 	# Modify the basics.
