@@ -1,4 +1,66 @@
+epa = dfs['epa']
+vin = dfs['vin']
+
+epa_original, vin_original = dfs['epa_original'], dfs['vin_original']
+pd.concat([epa.loc[epa.EPA_ID == 20164], vin.loc[vin.VIN_ID == 53139]]).to_csv('compare.csv')
+
+sorted(epa.loc[epa.make == 'mini', 'model_mod'].apply(take_out).replace(mapping).apply(lambda s: s.replace(' ', '')).unique())
+sorted(vin.loc[vin.make == 'mini', 'model_mod'].apply(take_out).replace(mapping).unique())
+sorted(vin.loc[vin.make == 'mini', 'model_mod'].unique())
+
+sorted(epa.loc[(epa.make == 'cadillac') & (epa.model.str.contains('xts')), 'model_mod'].unique())
+vin.loc[(vin.make == 'cadillac') & (vin.model.str.contains('xts')) & vin.Series.str.contains('livery'), 'model_mod'] = 'xtslimo'
+epa.loc[(epa.make == 'cadillac') & (epa.model.str.contains('(?=.*xts.*)(?=.*(limo|hearse).*)')), 'model_mod'] = 'xtslimo'
+
+vin.loc[(vin.make == 'toyota') & (vin.model.str.contains('solara')), 'model'].unique()
+epa.loc[(epa.make == 'toyota') & (epa.model.str.contains('solara')), 'model'].unique()
+ = 'xtslimo'
+
+for c in vin_original.columns:
+	print(any(vin_original.apply(lambda x: pd.Series.fillna(x, u'-1'))[c].isnull()))
+
+
+
+, Series, BodyClass'.split(', ')].drop_duplicates()
+
+ca
+
+def take_out(s):
+	take_out_list  = 'gp-2, gp, coupe, kit, \(.*\), 2, 4, door'.split(', ')
+	for si in take_out_list: 
+		s = re.sub(si, '', s).strip()
+	return s.strip()
+sorted(epa.loc[epa.make == 'mini', 'model'].apply(take_out).unique())
+
+print(sorted(epa.loc[epa.make == 'mini', 'model'].unique()))
+print(sorted(epa.loc[epa.make == 'mini', 'model'].apply(take_out).unique()))
+
+sorted(epa.loc[epa.make == 'mini', 'model_mod'].unique())
+sorted(vin.loc[vin.make == 'mini', 'model_mod'].unique())
+
+dfs['matched_vins_ranges'].groupby('make_vin')['make_vin, comb08_spread'.split(', ')].mean().to_csv('mean_spread_by_make.csv')
+
+bmw_makes = pd.DataFrame()
+mercedes_models = pd.concat([pd.DataFrame(sorted(vin.loc[vin.make == 'mercedes-benz', 'model_mod'].unique())), 
+	pd.DataFrame(sorted(epa.loc[epa.make == 'mercedes-benz', 'model_mod'].unique()))], axis=1)
+mercedes_models.to_csv('mercedes_models.csv')
+
+epa.loc[epa.make == 'mercedes-benz'].to_csv('mercedes.csv')
+
+
+epa_original.loc[epa_original.fuelType1_mod == 'phev', 'atvType, fuelType1, fuelType2, model_mod, m
+ake'.split(', ')].drop_duplicates()
+
+
+
+
+
 matched_vins_simple.loc[matched_vins_simple.VIN_vin == '4tarn81axrz298544', 
+
+
+
+
+
 	'EPA_ID_epa'.split(', ')]
 
 epa.loc[epa.EPA_ID == 1405]
