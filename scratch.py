@@ -1,3 +1,101 @@
+epa_original.loc[epa_original.EPA_ID == 29598, 'model, model_mod'.split(', ')]
+epa_original.loc[epa_original.make == 'chevrolet', 'model, model_mod'.split(', ')]
+epa_original.loc[(epa_original.make == 'chevrolet') & (epa_original.model.str.contains('traverse')),'make, model, year, fuelType1'.split(', ')].drop_duplicates()
+epa_original_m.loc[(epa_original_m.make == 'chevrolet') & (epa_original_m.model.str.contains('hhr')),'make, model, year, fuelType1'.split(', ')].drop_duplicates()
+
+vins_matched = matched_vins_simple.VIN_vin
+vins_matched_all = vin.loc[vin.VIN.isin(vins_matched)]
+
+epa_original.loc[(epa_original.make == 'hyundai') & (epa_original.model.str.contains('elantra') & (epa_original.year == '2010')), 'make, model, year, fuelType1'.split(', ')].drop_duplicates()
+epa.loc[(epa.make == 'hyundai') & (epa.model.str.contains('elantra') & (epa.year == 2010)), [
+		'make',
+		'model_mod',
+		'year',
+		'fuelType1_mod',
+		]].drop_duplicates()
+vin.loc[(vin.make == 'toyota') & (vin.model.str.contains('highlander') & (vin.year == '2001')), [
+		'make',
+		'model_mod',
+		'year',
+		'fuelType1_mod',
+		'VIN',
+		'type',
+		'Series',
+		'Trim',
+		]]
+epa.loc[(epa.make == 'toyota') & (epa.model.str.contains('highlander') & (epa.year == '2001'))] #, [
+		'make',
+		'model_mod',
+		'year',
+		'fuelType1_mod',
+		'type'
+		]]
+
+
+vin_original_pre, epa_original_pre = m.load()
+vin, epa = m.modify(vin_original_pre, epa_original_pre)
+
+epa.loc[(epa.make == 'chevrolet') & (epa.model.str.contains('hhr')),'make, model, year, fuelType1'.split(', ')].drop_duplicates()
+
+epa.loc[epa.EPA_ID == 29598, 'model, model_mod, type, VClass'.split(', ')]
+
+
+
+
+matched_vins['VIN, counts'.split(', ')].drop_duplicates().counts.sum()/vin['VIN, counts'.split(', ')].drop_duplicates().counts.sum()
+
+
+vin_1, epa_1 = m.mod_1(vin_original_1, epa_original_1)
+vin, epa = m.mod_2(vin_1, epa_1)
+
+epa_original.loc[(epa_original.VClass.str.contains(r'pickup|sport|van')) &
+	(epa_original.model_mod.str.contains('10|15|25|35')), 
+	'model, model_mod, make'.split(', ')].drop_duplicates()
+
+	epa_original = m.mod_for_split(epa_original, separator)
+		vin_original, epa_original = m.load_data()
+		vin_original_1, epa_original_1 = m.split_and_expand(vin_original, epa_original)
+
+	separator = r'/|,'
+sorted(epa_original.loc[epa_original.model.str.contains(separator), 'model'].unique())
+	.to_csv('epa_pickups.csv')
+
+epa_original_1.loc[epa_original_1.model == 'w100/w150 pickup 4wd']
+epa_original.loc[epa_original.model == s]
+
+
+epa.loc[epa.type != '-1', 'type, model, model_mod, make'.split(', ')].drop_duplicates().sort_values('make, model_mod, type, model'.split(', ')).to_csv('epa_pickups.csv')
+vin.loc[vin.type != '-1', 'type, model, model_mod, make'.split(', ')].drop_duplicates().to_csv('vin_pickups.csv')
+
+
+epa.loc[(epa.model.str.contains('(?=(?:.*civic.*))(?=(?:.*hx.*))')) & (epa.make == 'honda'), 'model_mod'] = 'civichx'
+vin.loc[(vin.model.str.contains('civic')) & (vin.make == 'honda'), ''] = 'civichx'
+
+epa_original.loc[(epa_original.model.str.contains('ffv')) & (epa_original.make == 'ford') & (epa_original.year == 1999), 'model, model_mod , fuelType1_mod, displ, cylinders'.split(', ')]
+epa_original.loc[(epa_original.model.str.contains('ffv')) & (epa_original.make == 'ford') & (epa_original.year == '1999')].to_csv('')
+epa.loc[(epa.model.str.contains('ffv')) & (epa.make == 'ford') & (epa.year == '1999'), 'model, fuelType1, displ, cylinders'.split(', ')]
+
+epa_original.loc[(epa_original.model.str.contains('taurus')) & (epa_original.make == 'ford') & (epa_original.year == '1999'), 'model, fuelType1, displ, cylinders'.split(', ')]
+
+
+ = 'civichx'
+
+
+WHERE MAKE='FORD' AND INDEX(MODEL,'Ranger') AND MODELYEAR=1999;
+
+
+for s in models:
+	print s
+	print split_row(s, separator)
+
+	epa_original.loc[epa_original.model_mod.str.contains(pattern1), 'model_mod']
+
+vin_orignial.loc[(vin_original.make == 'ford') & (vin_original.model == 'escape') & (vin_original.year >= 2010) & (vin_original.year <= 2012) & 
+	(vin_original.displ_mod == '3.0') & (vin_original.cylinders == '6'), 'fuelType1'] = 'ffv'
+vin_original.olc[(vin_original.make == 'ford') & (vin_original.model == 'escape') & (vin_original.year >= 2010) & (vin_original.year <= 2012), 'cylinders'].unique()
+vin_original.loc[(vin_original.make == 'bmw') & (vin_original.model.str.contains('^x'))].to_csv('x.csv')
+epa_original.loc[(epa_original.make == 'chevrolet') & (epa_original.model.str.contains('captiva'))].to_csv('captiva_epa.csv')
+
 epa = dfs['epa']
 vin = dfs['vin']
 

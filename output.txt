@@ -1,0 +1,226 @@
+Loading datasets
+Modifying datasets
+Merging datasets
+**************************************************
+('Merging using:', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type'])
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'displ_mod', 'cylinders', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 1.70%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'displ_mod', 'cylinders', 'transmission_type_mod'])
+Weighted match fraction: 2.00%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'displ_mod', 'cylinders', 'transmission_speeds_mod'])
+Weighted match fraction: 2.03%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'displ_mod', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 2.03%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'cylinders', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 2.04%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'displ_mod', 'cylinders', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 8.03%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'displ_mod', 'cylinders'])
+Weighted match fraction: 55.12%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'displ_mod', 'transmission_type_mod'])
+Weighted match fraction: 55.17%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'displ_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 55.17%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'cylinders', 'transmission_type_mod'])
+Weighted match fraction: 55.17%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'cylinders', 'transmission_speeds_mod'])
+Weighted match fraction: 55.17%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 55.17%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'displ_mod', 'cylinders', 'transmission_type_mod'])
+Weighted match fraction: 57.32%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'displ_mod', 'cylinders', 'transmission_speeds_mod'])
+Weighted match fraction: 57.32%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'displ_mod', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 57.41%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'cylinders', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 57.44%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'displ_mod'])
+Weighted match fraction: 63.07%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'cylinders'])
+Weighted match fraction: 64.96%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'transmission_type_mod'])
+Weighted match fraction: 64.96%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 64.96%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'displ_mod', 'cylinders'])
+Weighted match fraction: 84.64%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'displ_mod', 'transmission_type_mod'])
+Weighted match fraction: 84.67%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'displ_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 84.67%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'cylinders', 'transmission_type_mod'])
+Weighted match fraction: 84.70%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'cylinders', 'transmission_speeds_mod'])
+Weighted match fraction: 84.70%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 84.72%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'drive_mod'])
+Weighted match fraction: 85.81%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'displ_mod'])
+Weighted match fraction: 88.36%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'cylinders'])
+Weighted match fraction: 88.71%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'transmission_type_mod'])
+Weighted match fraction: 88.74%
+('Matching on ', ['make', 'model_mod', 'year', 'fuelType1_mod', 'type', 'transmission_speeds_mod'])
+Weighted match fraction: 88.74%
+**************************************************
+('Merging using:', ['make', 'model_mod', 'year', 'type'])
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'displ_mod', 'cylinders', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 88.74%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'displ_mod', 'cylinders', 'transmission_type_mod'])
+Weighted match fraction: 88.74%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'displ_mod', 'cylinders', 'transmission_speeds_mod'])
+Weighted match fraction: 88.74%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'displ_mod', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 88.74%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'cylinders', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 88.74%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'displ_mod', 'cylinders', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 88.77%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'displ_mod', 'cylinders'])
+Weighted match fraction: 89.73%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'displ_mod', 'transmission_type_mod'])
+Weighted match fraction: 89.73%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'displ_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 89.73%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'cylinders', 'transmission_type_mod'])
+Weighted match fraction: 89.73%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'cylinders', 'transmission_speeds_mod'])
+Weighted match fraction: 89.73%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 89.73%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'displ_mod', 'cylinders', 'transmission_type_mod'])
+Weighted match fraction: 90.42%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'displ_mod', 'cylinders', 'transmission_speeds_mod'])
+Weighted match fraction: 90.43%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'displ_mod', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 90.43%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'cylinders', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 90.43%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'displ_mod'])
+Weighted match fraction: 90.54%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'cylinders'])
+Weighted match fraction: 90.98%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'transmission_type_mod'])
+Weighted match fraction: 90.98%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 90.98%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'displ_mod', 'cylinders'])
+Weighted match fraction: 91.43%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'displ_mod', 'transmission_type_mod'])
+Weighted match fraction: 91.43%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'displ_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 91.43%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'cylinders', 'transmission_type_mod'])
+Weighted match fraction: 91.43%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'cylinders', 'transmission_speeds_mod'])
+Weighted match fraction: 91.43%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'transmission_type_mod', 'transmission_speeds_mod'])
+Weighted match fraction: 91.43%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'drive_mod'])
+Weighted match fraction: 91.56%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'displ_mod'])
+Weighted match fraction: 91.61%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'cylinders'])
+Weighted match fraction: 91.71%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'transmission_type_mod'])
+Weighted match fraction: 91.71%
+('Matching on ', ['make', 'model_mod', 'year', 'type', 'transmission_speeds_mod'])
+Weighted match fraction: 91.71%
+**************************************************
+**************************************************
+Final weighted match fraction: 99.12%
+Merge fraction weighted without heavy vehicles: 91.71%
+Duplication rate: 2.231
+Merge fraction weighted: 99.12%
+0.0     49045
+1.0      6521
+2.0      4802
+3.0      2615
+4.0       826
+5.0       521
+6.0       265
+7.0       166
+8.0        67
+9.0       135
+10.0       13
+11.0       33
+14.0        5
+Name: highway08_spread, dtype: int64
+0.0     75.437598
+1.0     10.030147
+2.0      7.386101
+3.0      4.022211
+4.0      1.270496
+5.0      0.801366
+6.0      0.407605
+7.0      0.255330
+8.0      0.103055
+9.0      0.207648
+10.0     0.019996
+11.0     0.050758
+14.0     0.007691
+Name: highway08_spread, dtype: float64
+0.0     49938
+1.0      8483
+2.0      4411
+3.0      1070
+4.0       496
+5.0       173
+6.0       173
+7.0       133
+8.0        59
+9.0        29
+10.0       18
+11.0        4
+15.0        5
+16.0       22
+Name: comb08_spread, dtype: int64
+0.0     76.811148
+1.0     13.047959
+2.0      6.784693
+3.0      1.645799
+4.0      0.762913
+5.0      0.266097
+6.0      0.266097
+7.0      0.204571
+8.0      0.090750
+9.0      0.044606
+10.0     0.027686
+11.0     0.006153
+15.0     0.007691
+16.0     0.033839
+Name: comb08_spread, dtype: float64
+0.0     51285
+1.0      8736
+2.0      3169
+3.0       876
+4.0       348
+5.0       253
+6.0       187
+7.0        80
+8.0        23
+9.0        25
+11.0        4
+13.0        1
+15.0        5
+21.0       22
+Name: city08_spread, dtype: int64
+0.0     78.883010
+1.0     13.437106
+2.0      4.874335
+3.0      1.347402
+4.0      0.535269
+5.0      0.389147
+6.0      0.287630
+7.0      0.123050
+8.0      0.035377
+9.0      0.038453
+11.0     0.006153
+13.0     0.001538
+15.0     0.007691
+21.0     0.033839
+Name: city08_spread, dtype: float64
+Unique matches: 65.78%
