@@ -40,48 +40,67 @@
 	- utilimaster motor corporation
 	- international.
 
-9) Replace fields based on the following logic:
+9) Replace fields based on the following mapping:
 
 ```
-	- 	'fuelType1':	{
-	- 	- 'compressed natural gas (cng)':	- 	- 	- 	- 	'natural gas',
-	- 	- 'liquefied petroleum gas (propane or lpg)':	- 	- 	- 'natural gas',
-	- 	- 'liquefied natural gas (lng)':	- 	- 	- 	- 	'natural gas',
-	- 	- 'gasoline, diesel':	- 	- 	- 	- 	- 	- 'gasoline',
-	- 	- 'diesel, gasoline':	- 	- 	- 	- 	- 	- 'gasoline',
-	- 	- 'ethanol (e85)':	- 	- 	- 	- 	- 	- 'ethanol',
-	- 	- 'compressed natural gas (cng), gasoline':	- 	- 	- 'gasoline',
-	- 	- 'gasoline, compressed natural gas (cng)':	- 	- 	- 'gasoline',
-	- 	- 'compressed hydrogen / hydrogen':	- 	- 	- 	- 'hydrogen',
-	- 	- 'fuel cell':	- 	- 	- 	- 	- 	- 	'hydrogen',
-	- 	- },
-	- 	'drive':	{
-	- 	- '4x2':	- 	- 	- 	- 	- 	- 	- 	- 'two',
-	- 	- '6x6':	- 	- 	- 	- 	- 	- 	- 	- 'all',
-	- 	- '6x2':	- 	- 	- 	- 	- 	- 	- 	- 'two',
-	- 	- '8x2':	- 	- 	- 	- 	- 	- 	- 	- 'two',
-	- 	- 'rwd/ rear wheel drive':	- 	- 	- 	- 	- 	'two',
-	- 	- 'fwd/front wheel drive':	- 	- 	- 	- 	- 	'two',
-	- 	- '4x2, rwd/ rear wheel drive':	- 	- 	- 	- 	- 'two',
-	- 	- '4x2, fwd/front wheel drive':	- 	- 	- 	- 	- 'two',
-	- 	- 'rwd/ rear wheel drive, 4x2':	- 	- 	- 	- 	- 'two',
-	- 	- 'fwd/front wheel drive, 4x2':	- 	- 	- 	- 	- 'two',
-	- 	- '4wd/4-wheel drive/4x4':	- 	- 	- 	- 	- 	'all',
-	- 	- 'awd/all wheel drive':	- 	- 	- 	- 	- 	- 'all',
-	- 	- },
-	- 	'transmission_type':	{
-	- 	- 'manual/standard': 	- 	- 	- 	- 	- 	- 'manu',
-	- 	- 'automated manual transmission (amt)': 	- 	- 	- 	'manu',
-	- 	- 'manual/standard, manual/standard': 	- 	- 	- 	'manu',
-	- 	- 'dual-clutch transmission (dct)': 	- 	- 	- 	- 'manu',
-	- 	- 'continuously variable transmission (cvt)': 	- 	- 	'auto',
-	- 	- 'automatic': 	- 	- 	- 	- 	- 	- 	'auto',
-	- 	- 'automatic, continuously variable transmission (cvt)': 	- 	'auto',
-	- 	}
-	- }
+		'vin': {
+			'fuelType1':	{
+				'compressed natural gas (cng)':									'natural gas',
+				'liquefied petroleum gas (propane or lpg)':						'natural gas',
+				'liquefied natural gas (lng)':									'natural gas',
+				'gasoline, diesel':												'gasoline',
+				'diesel, gasoline':												'gasoline',
+				'ethanol (e85)':												'ethanol',
+				'compressed natural gas (cng), gasoline':						'gasoline',
+				'gasoline, compressed natural gas (cng)':						'gasoline',
+				'compressed hydrogen / hydrogen':								'hydrogen',
+				'fuel cell':													'hydrogen',
+				},
+			'drive':	{
+				'4x2':																'two',
+				'6x6':																'all',
+				'6x2':																'two',
+				'8x2':																'two',
+				'rwd/ rear wheel drive':											'two',
+				'fwd/front wheel drive':											'two',
+				'4x2, rwd/ rear wheel drive':										'two',
+				'4x2, fwd/front wheel drive':										'two',
+				'rwd/ rear wheel drive, 4x2':										'two',
+				'fwd/front wheel drive, 4x2':										'two',
+				'4wd/4-wheel drive/4x4':											'all',
+				'awd/all wheel drive':												'all',
+				},
+			'transmission_type':	{
+				'manual/standard': 												'manu',
+				'automated manual transmission (amt)': 							'manu',
+				'manual/standard, manual/standard': 							'manu',
+				'dual-clutch transmission (dct)': 								'manu',
+				'continuously variable transmission (cvt)': 					'auto',
+				'automatic': 													'auto',
+				'automatic, continuously variable transmission (cvt)': 			'auto',
+				}
+			},
+		'epa': {
+			'fuelType1':	{
+				'regular gasoline':			'gasoline',
+				'premium gasoline':			'gasoline',
+				'midgrade gasoline':		'gasoline',
+				},
+			'drive':	{
+				'rear-wheel drive':				'two',
+				'front-wheel drive':			'two',
+				'2-wheel drive':				'two',
+				'all-wheel drive':				'all',
+				'4-wheel drive':				'all',
+				'4-wheel or all-wheel drive':	'all',
+				'part-time 4-wheel drive':		'all',
+				},
+			}
+		}
+
 ```
 
-e.g. where `fuelType1` is `compressed natural gas (cng)`, it's replaced with `natural gas`; where `drive` is `4x2`, it becomes `two`.
+e.g. for `vin`, where `fuelType1` is `compressed natural gas (cng)`, it's replaced with `natural gas`; where `drive` is `4x2`, it becomes `two`.
 
 10) Modify fuel type to identify flexible fuel vehicles and electric vehicles. 
 	10) a) Flexible fuel vehicles. 
