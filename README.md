@@ -1,3 +1,5 @@
+# Merging EPA MPG Data with vPIC VIN Data
+
 ## I. Load and Fix. 
 
 1. Load `vin` and `epa` datasets from files:
@@ -134,7 +136,7 @@ Modify datasets such that the fields that are being matched correspond and add c
 		- drop `transmission_type_mod`, match on `make`, `model_mod`, `year`, `fuelType1_mod`, `type`, `drive_mod`, `displ_mod`, `cylinders`, `transmission_speeds_mod`;
 		2. ...
 	3. drop 2 fields:
-		1. drop `transmission_type_mod` and `tranmission_speeds_mod`, match on `make`, `model_mod`, `year`, `fuelType1_mod`, `type`, `drive_mod`, `displ_mod`, `cylinders`;
+		1. drop `transmission_type_mod` and `tranmission_speeds_mod`, match on `make`, `model_mod`, `year`, `fuelType1_mod`, `type`, `drive_mod`, `dpdfispl_mod`, `cylinders`;
 		2. drop `displ_mod`, `cylinders`, match on `make`, `model_mod`, `year`, `fuelType1_mod`, `type`, `drive_mod`, `transmission_type_mod`, `transmission_speeds_mod`
 		3. ...
 	4. ...
@@ -282,3 +284,4 @@ Weighted match fraction: 89.71%
 Weighted match fraction: 99.35%
 **************************************************
 ```
+
