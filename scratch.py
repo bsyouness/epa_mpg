@@ -1,3 +1,15 @@
+matched_vins_ranges_full.loc[matched_vins_ranges_full.VIN_vin == '1gccs144xw8198543']
+
+vin_original.loc[vin_original.model.str.contains('monte'), 'model_mod']
+
+# https://stackoverflow.com/questions/14571090/ipython-redirecting-output-of-a-python-script-to-a-file-like-bash
+from IPython.utils import io
+with io.capture_output() as captured:
+    %run my_script.py
+
+print captured.stdout
+
+
 epa_original.loc[epa_original.EPA_ID == 29598, 'model, model_mod'.split(', ')]
 epa_original.loc[epa_original.make == 'chevrolet', 'model, model_mod'.split(', ')]
 epa_original.loc[(epa_original.make == 'chevrolet') & (epa_original.model.str.contains('traverse')),'make, model, year, fuelType1'.split(', ')].drop_duplicates()
