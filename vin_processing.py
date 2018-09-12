@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-
 from __future__ import division
+import re
 import csv, codecs, cStringIO
 import requests
 from requests.adapters import HTTPAdapter
@@ -12,7 +12,7 @@ from multiprocessing import Pool, cpu_count
 import sys
 from datetime import datetime
 from collections import OrderedDict
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, MetaData, Table, Column
 from sqlite3 import OperationalError
 
 import ees.tools.xl.xlwings_tools as xl
@@ -20,8 +20,8 @@ import ees.tools.xl.xlwings_tools as xl
 db_name = r'X:/EPA_MPG/epa_mpg.sqlite'
 engine = create_engine(r"sqlite:///{}".format(db_name), encoding = 'utf-8')
 
-def to_sql(df, table_name):
-    df.to_sql(table_name, engine, if_exists='replace', index=False)      
+def to_sql(df, table_name, if_exists='replace'):
+    df.to_sql(table_name, engine, if_exists=if_exists, index=False)      
 
 # from https://docs.python.org/2/library/csv.html
 class UnicodeWriter:
@@ -87,13 +87,16 @@ def get_json(vin):
 
     # based on https://stackoverflow.com/questions/23013220/max-retries-exceeded-with-url
     session = requests.Session()
-    retry = Retry(connect=3, backoff_factor=0.5)
+    retry = Retry(connect=3, backoff_factor=10.)
     adapter = HTTPAdapter(max_retries=retry)
     session.mount('http://', adapter)
     session.mount('https://', adapter)
 
-    js = json.loads(session.get(url).text)
-    return OrderedDict(flatten(js))
+    try:
+        js = json.loads(session.get(url).text)
+        return OrderedDict(flatten(js))
+    except:
+        return {}
 
 def get_data_serial(vin_list):
     base_url = 'https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/{}?format=json' #&modelyear={}'
@@ -118,10 +121,10 @@ def get_data_parallel():
     df = pd.DataFrame(dict_list)
     df.to_csv('out_parallel_in_memory.csv')
 
-def get_data_parallel_stream(vin_list):
+def get_data_parallel_stream(vin_list, vin_file_path=r'X:\EPA_MPG\data\out_parallel.csv'):
     p = Pool(cpu_count())
     n = len(vin_list)
-    with open(r'data\out_parallel.csv', 'wb') as f:
+    with open(vin_file_path, 'w+b') as f:
         wr = UnicodeWriter(f, quoting=csv.QUOTE_ALL)
         wr.writerow(get_json(vin_list[0]).keys())
         for i, js in enumerate(p.imap_unordered(get_json, vin_list), 1):
@@ -142,26 +145,69 @@ def take_out_results_string(file_path):
     rg0 = sheet.range('A1')
     rg1 = rg0.end('right')
     columns = rg0.resize(1, rg1.column)
-    columns.value = [col.split('_')[-1] for col in columns.value]    
+    columns.value = [col.split('_')[-1] for col in columns.value]
+    book.save()
+    book.close() 
 
-def pre_process():
+# Another way to remove the string 'Results_0_' from the csv file. 
+def fix_column_names(vin_df, vin_file_path=r"X:\EPA_MPG\data\out_parallel.csv", change_in_file=False):
+    cols_mod = []
+    for col in vin_df.columns:
+        match = re.search('Results_0_(.+)', col)
+        if match:
+            cols_mod.append(match.groups()[0])
+        else:
+            cols_mod.append(col)
+    if change_in_file:
+        wb = vp.xl.Book(vin_file_path)
+        vin_file_name = os.path.basename(vin_file_path).split('.')[0]
+        wb.sheets(vin_file_name).range("A1").value = cols_mod
+    return cols_mod
+
+vin_file_name = 'out_missing'
+vin_file_path = r"X:\EPA_MPG\data\{}.csv".format(vin_file_name)
+def fix_vin_output_file(vin_file_path):
+    """Remove extra columns from the file that was just read based on the existing SQL table that contains the VINs.
+    
+    Args:
+        vin_file_path (TYPE): Description
+    
+    Returns:
+        TYPE: Description
+    """
+    vin_df = pd.read_csv(vin_file_path, dtype=unicode, encoding='utf8')
+    vin_df.columns = fix_column_names(vin_df)
+    # create a session
+    Session = sessionmaker(bind=vp.engine)
+    session = Session()
+    metadata = MetaData()
+    vin_table = Table('vin_with_vtyp_no_counts', metadata, autoload=True, autoload_with=engine)
+    old_col_names = [description['name'] for description in session.query(vin_table).column_descriptions]
+    new_cols = list(set(vin_df.columns) - set(old_vin_df.columns.tolist()))
+    vin_df.drop(columns=new_cols, inplace=True)
+    return vin_df
+
+def get_counts(put_in_db=True, file_path=None, file_name='txsafe18', if_exists='replace'):
     """Extract info from Tom's VIN file.
     """
-    with open('../data/txsafe18.txt', 'r') as f:
-        vins_lines = f.readlines()
+    if not file_path:
+        file_path = '../data/{}.txt'.format(file_name)
+    with open(file_path, 'r') as f:
+        vin_lines = f.readlines()
     def parse(s, position):
         try:
             return ''.join(s.split(',')[position].split())
         except:
             return 0
-    vins = map(lambda x: parse(x, 0), vins_lines)
-    counts = map(lambda x: parse(x, 3), vins_lines)
+    vins = map(lambda x: parse(x, 0), vin_lines)
+    counts = map(lambda x: parse(x, 3), vin_lines)
     counts_with_vins = pd.DataFrame(zip(vins, counts), columns=['VIN', 'counts'])
-    to_sql(pd.Series(vins), 'just_vins')
-    to_sql(counts_with_vins, 'counts_with_vins')
+    if put_in_db:
+        to_sql(pd.Series(vins), 'just_vins', if_exists=if_exists)
+        to_sql(counts_with_vins, 'counts_with_vins')
     return counts_with_vins
 
-def add_vtyp(vin_file_path, vtyp_file_path=r"X:\EPA_MPG\data\vtyp_no_dupes.csv"):
+def add_vtyp(vin_file_path, vtyp_file_path=r"X:\EPA_MPG\data\vtyp_no_dupes.csv", if_exists='append'):
     vin_df = pd.read_csv(vin_file_path, dtype=unicode, encoding='utf8')
     # Get rid of rows with errors. 
     vin_df.dropna(subset=['VIN'], inplace=True)
@@ -173,10 +219,20 @@ def add_vtyp(vin_file_path, vtyp_file_path=r"X:\EPA_MPG\data\vtyp_no_dupes.csv")
     except:
         vtyp_df = process_vtyp(vtyp_file_path)
     
-    to_sql(pd.merge(vin_df, vtyp_df, how='left', on=['vin8', 'vin1012']),
-        'vin_with_vtyp_no_counts')
+    vin_df = pd.merge(vin_df, vtyp_df, how='left', on=['vin8', 'vin1012'])
+    to_sql(vin_df, 'vin_with_vtyp_no_counts', if_exists=if_exists)
+
+    return vin_df
 
 def process_vtyp(vtyp_file_path):
+    """ Process CSV file with VTYP information and push to DB.
+    
+    Args:
+        vtyp_file_path (str): path to CSV file containing VTYP data. 
+    
+    Returns:
+        pd.DataFrame
+    """
     vtyp_df = pd.read_csv(vtyp_file_path, dtype=unicode, encoding='utf8')
     vtyp_df['vin8'] = vtyp_df['VIN'].apply(lambda s: s[:8])
     vtyp_df['vin1012'] = vtyp_df['VIN'].apply(lambda s: s[9:12])
@@ -203,8 +259,36 @@ def add_counts():
     to_sql(pd.merge(vin_df, counts, how='left', on=['VIN']),
         'vin_with_vtyp')
 
-def vins_not_read():
+def get_vins_not_read():
+    vin_df = pd.read_sql('vin_with_vtyp', engine)
+    vins = pd.read_sql('just_vins', engine)
+    counts_with_vins = pd.read_sql('counts_with_vins', engine)
+    not_read = set(vin_df['VIN']) - set(vins)
+    not_read_with_counts = pd.merge(pd.DataFrame(list(not_read), columns=['VIN']), counts_with_vins, how='left')
+    not_read_with_counts.to_csv(r"X:\EPA_MPG\data\vins_not_read.csv")
+    return vin_df, not_read_with_counts
 
+def add_vins_not_read():
+    vin_df = pd.read_sql('vin_with_vtyp', engine)
+    not_read_df = pd.read_csv('../data/vins_not_read_now_read.csv', encoding='utf-8')
+    vtyp_df = pd.read_sql('vtyp_based_on_VIN8_and_VIN1012', engine)
+    not_read_df['vin8'] = not_read_df['vin'].apply(lambda s: s[:8])
+    not_read_df['vin1012'] = not_read_df['vin'].apply(lambda s: s[9:12])
+    not_read_df_with_vtyp = pd.merge(not_read_df, vtyp_df, how='left', on=['vin8', 'vin1012'])
+
+    # Modify columns names so they align. 
+    upper_vin_cols = [col.upper() for col in vin_df.columns]
+    upper_not_read_cols = [col.upper() for col in not_read_df_with_vtyp.columns]
+    missing_cols = set(upper_not_read_cols) - set(upper_vin_cols) 
+    added_cols = set(upper_vin_cols) - set(upper_not_read_cols)
+    vin_mapping = dict(zip(upper_vin_cols, vin_df.columns))
+    not_read_mapping = dict(zip(not_read_df_with_vtyp.columns, upper_not_read_cols))
+    col_mapping = dict((k, vin_mapping.setdefault(v, k)) for (k, v) in not_read_mapping.items())
+
+    not_read_df_with_vtyp.rename(columns=col_mapping, inplace=True)
+    new_vin_df = pd.concat([vin_df, not_read_df_with_vtyp], axis=0)
+    new_vin_df.to_sql('vin_with_vtyp', engine, if_exists='replace', index=False)
+    return new_vin_df
 
 if __name__ == "__main__":
     pass

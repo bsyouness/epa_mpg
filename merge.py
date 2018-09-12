@@ -21,8 +21,7 @@ db_name = r'X:/EPA_MPG/epa_mpg.sqlite'
 engine = create_engine(r"sqlite:///{}".format(db_name), encoding = 'utf-8')
 
 def load(read_csv=False, vin_name='vin_with_vtyp', epa_name='raw_epa_data', 
-	vin_file=r'X:\EPA_MPG\vin_with_vtyp3.csv', epa_file=r'X:\EPA_MPG\epa_data.csv', init_yr=1991, 
-	last_yr=np.inf):
+	vin_file=r'X:\EPA_MPG\vin_with_vtyp3.csv', epa_file=r'X:\EPA_MPG\epa_data.csv'):
 	"Load data from files and apply some basic corrections and filters."
 	
 	if read_csv:
@@ -31,6 +30,12 @@ def load(read_csv=False, vin_name='vin_with_vtyp', epa_name='raw_epa_data',
 	else:
 		epa_original = pd.read_sql(epa_name, engine)
 		vin_original = pd.read_sql(vin_name, engine)
+
+	return vin_original, epa_original
+
+def fix(vin, epa, init_yr=1991, last_yr=np.inf):
+	
+	vin_original, epa_original = vin.copy(), epa.copy()
 
 	# Fix errors in the datasets.
 	vin_original.loc[(vin_original.ModelYear == '1998') & (vin_original.Make == 'FORD') & 
@@ -48,7 +53,7 @@ def load(read_csv=False, vin_name='vin_with_vtyp', epa_name='raw_epa_data',
 
 	# Define integer id based on error code from VIN database. 
 	vin_original['error_id'] = vin_original.ErrorCode.apply(
-		lambda x: re.match('([0-9]+).*', x).groups()[0])
+		lambda x: re.search('([0-9]+).*', x).groups()[0])
 
 	# Define columns on which the merge will be performed.
 	epa_cols = [
@@ -78,7 +83,7 @@ def load(read_csv=False, vin_name='vin_with_vtyp', epa_name='raw_epa_data',
 
 	# Get rid of undesirable columns.
 	vin_keep_cols = [
-		'VIN', 'VehicleType', 'BodyClass', 'error_id', 'Series', 'vtyp3', 'counts', 'Trim', 'Trim2', 'GVWR'
+		'VIN', 'VehicleType', 'BodyClass', 'error_id', 'Series', 'vtyp3', 'counts', 'Trim', 'Trim2', 'GVWR', 'BodyCabType', 'Doors'
 		] + vin_cols 
 	vin_original.drop([x for x in vin_original.columns if x not in vin_keep_cols], axis=1, inplace=True)
 	epa_keep_cols = [
@@ -234,22 +239,48 @@ def load(read_csv=False, vin_name='vin_with_vtyp', epa_name='raw_epa_data',
 
 	# Modify fuel types to account for electric vehicles. 
 	def mod_electric_vehicles(df):
-		df.loc[(df.model.str.contains('plug|volt')) | 
-			((df.fuelType1.str.contains('electric')) & (df.fuelType2.str.contains('gasoline'))),
-			'fuelType1_mod'] = 'phev'
-		df.loc[((df.fuelType1.str.contains('gasoline')) & (df.fuelType2.str.contains('electric'))) |
-			(df.model.str.contains('(hev|hybrid)')), 'fuelType1_mod'] = 'hev'
-		df.loc[(df.model.str.contains('bev')) | (df.model.str.contains('electric')) | 
-			(df.fuelType1.str.contains('electric')), 'fuelType1_mod'] = 'bev'
+		indexes_processed = []
+		# phev.
+		phev_index = df.loc[(df.model.str.contains('plug|volt')) |  
+			((df.fuelType1.str.contains('electric')) & (df.fuelType2.str.contains('gasoline')))].index.tolist()
+		indexes_processed += phev_index
+		# Optional, because first one processed: `indexes_processed` is empty:
+		# phev_index = list(set(phev_index) - set(indexes_processed))
+		df.loc[phev_index, 'fuelType1_mod'] = 'phev'
+		# hev.
+		hev_index = df.loc[((df.fuelType1.str.contains('gasoline')) & (df.fuelType2.str.contains('electric'))) |
+			(df.model.str.contains('(hev|hybrid)'))].index.tolist()
+		hev_index = list(set(hev_index) - set(indexes_processed))
+		df.loc[hev_index, 'fuelType1_mod'] = 'hev'
+		# bev.
+		bev_index = df.loc[(df.model.str.contains('bev')) | (df.model.str.contains('electric')) | 
+			(df.fuelType1.str.contains('electric'))].index.tolist()
+		# Optional, because last one processed.
+		# bev_index = list(set(bev_index) - set(indexes_processed))
+		df.loc[bev_index, 'fuelType1_mod'] = 'bev'
 		return df
 	vin_original = mod_electric_vehicles(vin_original)
+	# Make Chevvy Volts PHEVs.
+	vin_original.loc[(vin_original.make == 'chevrolet') & (vin_original.model.str.contains('volt')), 'fuelType1_mod'] = 'phev'
 	ev_dict = {'hybrid': 'hev', 'plug-in hybrid': 'phev', 'ev': 'bev'}
 	for k, v in ev_dict.items():
 		epa_original.loc[epa_original.atvType == k, 'fuelType1_mod'] = v 
 
 	# Make years ints.
-	epa_original.year = epa_original.year.apply(int)
-	vin_original.year = vin_original.year.apply(int)
+	epa_original.year = epa_original.year.apply(float).apply(int)
+	vin_original.year = vin_original.year.apply(float).apply(int)
+
+	# Fix some more errors in the datasets. 
+	## MY06 Chevy Tahoe and Suburban HEVs have the incorrect engine info in VPIC; they should be 5.3 liter 8 cylinder 
+	## FFV, not 2.4 liter 4 cylinder.
+	vin_original.loc[(vin_original.year == 2006) & (vin_original.make.str.lower() == 'chevrolet') & 
+		(vin_original.model.str.lower().str.contains('tahoe|suburban') & (vin_original.fuelType1_mod == 'hev')), 
+		['cylinders', 'displ']] = ('8', '5.3')
+	## MY11 Chevy Silverado diesel has the incorrect engine in VPIC; it should be 6.6 liter 8 cylinder, not 2.2 liter 4 
+	## cylinder.
+	vin_original.loc[(vin_original.year == 2011) & (vin_original.make.str.lower() == 'chevrolet') & 
+		(vin_original.model.str.lower().str.contains('silverado') & (vin_original.fuelType1_mod == 'diesel')), 
+		['cylinders', 'displ']] = ('8', '6.6')
 
 	# Only keep years between `init_yr` and `last_yr`. 
 	vin_original = vin_original.loc[(vin_original.year >= init_yr) & (vin_original.year <= last_yr)]
@@ -274,7 +305,29 @@ def replace_spaces(s, pattern, replace_with='-'):
 		s = re.sub(_s, replace_with_(_s), s)
 	return s
 
-def modify_for_split(epa_original, separator):
+def modify_both_before_split(vin_mod, epa_mod):
+	## Lumina model.
+	pattern = r'(?=.*lumina.*)(?=.*(apv|minivan).*)'
+	epa_mod.loc[epa_mod.model.str.contains(pattern), 'model_mod'], 
+	vin_mod.loc[vin_mod.model.str.contains(pattern), 'model_mod'] = 'luminaapv'
+	# For Saab and Honda models, drop the dash. Note that this could be done after the splitting is done also. 
+	for df in vin_mod, epa_mod:
+		df.loc[df.make.str.contains('saab|honda'), 'model_mod'] = \
+			df.loc[df.make.str.contains('saab|honda'), 'model_mod'].str.replace('-', '')
+
+	return vin_mod, epa_mod
+
+def modify_vin_before_split(vin_mod):
+	# For chrysler models, replace town & country with townandcountry and new yorker with newyorker. 
+	vin_mod.loc[(vin_mod.make == 'chrysler') & (vin_mod.model_mod == 'town & country'), 'model_mod'] = \
+		u'townandcountry'
+	vin_mod.loc[(vin_mod.make == 'chrysler') & (vin_mod.model_mod == 'new yorker'), 'model_mod'] = \
+		u'newyorker'
+	# Pontiac model formula & convertible should be firebird.
+	vin_mod.loc[vin_mod.model_mod.str.contains('formula'), 'model_mod'] = 'firebird'
+	return vin_mod
+
+def modify_epa_before_split(epa_original, separator):
 	"Modify EPA models before splitting them where there is a separator in separate rows."
 	index_mod = epa_original.loc[epa_original.model.str.contains(separator)].index
 	epa_original.loc[index_mod, 'model_mod'] = \
@@ -295,13 +348,13 @@ def modify_for_split(epa_original, separator):
 	epa_original.loc[index_mod, 'model_mod'] = \
 		epa_original.loc[index_mod, 'model_mod'].apply(lambda x: replace_spaces(x, pattern, ''))
 	## Chrysler models. 
-	models_w_spaces = 'new yorker, town and country, fifth avenue, grand \S*'.split(', ')
+	models_w_spaces = r'new yorker, town and country, fifth avenue, grand \S*'.split(', ')
 	pattern = re.compile('(?=(' + '|'.join('{}'.format(x) for x in models_w_spaces) + '))')
 	index_mod = epa_original.loc[(epa_original.make == 'chrysler') & epa_original.model_mod.str.contains(pattern)].index
 	epa_original.loc[index_mod, 'model_mod'] = \
 		epa_original.loc[index_mod, 'model_mod'].apply(lambda x: replace_spaces(x, pattern, ''))
 	## Ferrari models. 
-	pattern = re.compile('\S* f1')
+	pattern = re.compile(r'\S* f1')
 	index_mod = epa_original.loc[(epa_original.make == 'ferrari') & epa_original.model_mod.str.contains(pattern)].index
 	epa_original.loc[index_mod, 'model_mod'] = \
 		epa_original.loc[index_mod, 'model_mod'].apply(lambda x: replace_spaces(x, pattern, ''))
@@ -311,24 +364,27 @@ def modify_for_split(epa_original, separator):
 	epa_original.loc[epa_original.make == 'mercedes-benz', 'model_mod'] = \
 		epa_original.loc[epa_original.make == 'mercedes-benz', 'model_mod'].apply(lambda s: s.replace('600sel', '600 sel'))
 	## Pontiac models. 
-	pattern = re.compile('(.*)(trans [^\s/]*)(.*)')
+	## Turn [u'trans sport 2wd', u'firebird/trans am', u'trans sport/montana 2wd'] into
+	## [u'trans 2wd', u'firebird/trans', u'trans/montana 2wd']
+	pattern = re.compile(r'(.*)(trans [^\s/]*)(.*)')
 	index_mod = epa_original.loc[(epa_original.make == 'pontiac') & epa_original.model_mod.str.contains(pattern)].index
 	epa_original.loc[index_mod, 'model_mod'] = \
 		epa_original.loc[index_mod, 'model_mod'].apply(lambda s: re.sub(pattern, r'\1trans\3', s))
+	epa_original.loc[epa_original.model_mod.str.contains('firebird'), 'model_mod'] = 'firebird'
 
 	return epa_original
 
 def split_row(s, separator):
 	pattern1 = re.compile(r'(.*?)(?=\S*(?:{}) *\S*?)(\S*)(.*)'.format(separator))
-	if pattern1.match(s):
-		groups = pattern1.match(s).groups()
+	if pattern1.search(s):
+		groups = pattern1.search(s).groups()
 		parts = map(lambda s: s.strip(), re.split(separator, groups[1]))
 		# For cases like: srt-8/9
 		pattern2 = re.compile(r'([\w\W]*?)(\d+)$') # e.g. srt-9
 		subparts = []
 		for part in parts:
-			if re.match(pattern2, part):
-				subparts.append(re.match(pattern2, part).groups())
+			if re.search(pattern2, part):
+				subparts.append(re.search(pattern2, part).groups())
 		# Check that we're in a case like srt-8/9 and not, 636/mrx-8.
 		if len(subparts) == len(parts) and subparts[0][0] != '':
 			def find_non_blank(t):
@@ -351,18 +407,17 @@ def split_and_expand(vin_original, epa_original):
 	vin_mod['model_mod'] = vin_mod['model']
 	epa_mod['model_mod'] = epa_mod['model']
 
-	# For chrysler models, replace town & country with townandcountry and new yorker with newyorker. 
-	vin_mod.loc[(vin_mod.make == 'chrysler') & (vin_mod.model_mod == 'town & country'), 'model_mod'] = \
-		u'townandcountry'
-	vin_mod.loc[(vin_mod.make == 'chrysler') & (vin_mod.model_mod == 'new yorker'), 'model_mod'] = \
-		u'newyorker'
-
-	## Lumina model.
-	epa_mod.loc[epa_mod.model.str.contains(r'(?=.*lumina.*)(?=.*apv.*)'), 'model_mod'], 
-	vin_mod.loc[vin_mod.model.str.contains(r'(?=.*lumina.*)(?=.*apv.*)'), 'model_mod'] = 'luminaapv'
+	## First, modify the models that will be split. 
+	vin_mod, epa_mod = modify_both_before_split(vin_mod, epa_mod)
+	vin_mod = modify_vin_before_split(vin_mod)
+	epa_mod = modify_epa_before_split(epa_mod, separator)
 
 	# Split rows that contain separators into several rows. 
 	## In VIN. 
+	## Expand each row that contains a symbol that is not a dash into however many rows are needed:
+	## e.g. `monte carlo/this& and this too$any symbol?is isolated - but not a dash or space`
+	## becomes one row for each of: `monte carlo`, `this`, ` and this too`, `any symbol`, and
+	## `is isolated - but not a dash or space`
 	print 'Expanding VIN data'
 	vin_expanded = pd.concat(
 			[pd.Series(np.append(row[[col for col in vin_mod.columns if col != 'model_mod']].values, [x]))
@@ -380,9 +435,7 @@ def split_and_expand(vin_original, epa_original):
 	vin_expanded['model_mod'] = vin_expanded.model_mod.str.replace('monte carlo', 'montecarlo')
 
 	## In EPA. 
-	## First, modify the models that will be split. 
-	epa_mod = modify_for_split(epa_mod, separator)
-	## Expand EPA models. 
+	## Expand each row that contains `separator` into however many rows are needed:
 	print 'Expanding EPA data'
 	epa_expanded = pd.concat(
 			[pd.Series(np.append(row[[col for col in epa_mod.columns if col != 'model_mod']].values, [x]))
@@ -398,7 +451,7 @@ def split_and_expand(vin_original, epa_original):
 	epa_expanded.loc[index_mod, 'model_mod'] = 'grandvoyager'
 
 	## Get rid of spaces after 'grand' and 'new'. 
-	pattern = re.compile('(grand|new)[\W]+([\w]+)')
+	pattern = re.compile(r'(grand|new)[\W]+([\w]+)')
 	### In EPA. 
 	index_mod = epa_expanded.loc[epa_expanded.model_mod.str.contains(pattern)].index
 	epa_expanded.loc[index_mod, 'model_mod'] = \
@@ -428,7 +481,7 @@ def split_and_expand(vin_original, epa_original):
 	# Remove class and series from model names. 
 	index_mod = vin_expanded.loc[vin_expanded.model_mod.str.contains(r'\w+\s*-\s*(?:class|series)')].index
 	vin_expanded.loc[index_mod, 'model_mod'] = \
-		vin_expanded.loc[index_mod, 'model_mod'].str.extract(r'(\w+)\s*-\s*(?:class|series)')
+		vin_expanded.loc[index_mod, 'model_mod'].str.extract(r'(\w+)\s*-\s*(?:class|series)').values
 
 	# Reset index.
 	vin_expanded = vin_expanded.reset_index(drop=True)
@@ -550,7 +603,7 @@ def add_type_from_vin(vin, default_type='0'):
 	vin.loc[(vin.make == 'chevrolet') & (vin.year == 2015) & vin.model_mod.str.contains(gmc_model_str) &
 		vin.VIN.apply(lambda x: x[5]).isin('T,U,V,W'.lower().split(',')), 'type_from_vin'] = '15'	
 	vin.loc[(vin.make == 'chevrolet') & (vin.year == 2015) & vin.model_mod.str.contains(gmc_model_str) &
-		vin.VIN.apply(lambda x: x[5]).isin('X,Y,Z,0'.lower().split(',')), 'type_from_vin'] = '15'	
+		vin.VIN.apply(lambda x: x[5]).isin('X,Y,Z,0'.lower().split(',')), 'type_from_vin'] = '25'	
 	vin.loc[(vin.make == 'chevrolet') & (vin.year == 2015) & vin.model_mod.str.contains(gmc_model_str) &
 		vin.VIN.apply(lambda x: x[5]).isin('1,2,3,4'.split(',')), 'type_from_vin'] = '35'
 
@@ -621,12 +674,12 @@ def mod_models(vin, epa):
 	# For Lexus models, drop the numbers. 
 	epa.loc[(epa.make == 'lexus') & (epa.model_mod.str.contains(r'(?:gs|sc)\d+')), 'model_mod'] = \
 		epa.loc[(epa.make == 'lexus') & (epa.model_mod.str.contains(r'(?:gs|sc)\d+')), 
-			'model_mod'].str.extract(r'(\D+)\d+')
+			'model_mod'].str.extract(r'(\D+)\d+').values
 	# Get rid of 'new' from all volkswagen models. 
 	vin.loc[(vin.make == 'volkswagen') & (vin.model_mod.str.contains('new')), 'model_mod'] = \
-		vin.loc[(vin.make == 'volkswagen') & (vin.model_mod.str.contains('new')), 'model_mod'].str.extract('new(.*)')
+		vin.loc[(vin.make == 'volkswagen') & (vin.model_mod.str.contains('new')), 'model_mod'].str.extract('new(.*)').values
 	epa.loc[(epa.make == 'volkswagen') & (epa.model_mod.str.contains('new')), 'model_mod'] = \
-		epa.loc[(epa.make == 'volkswagen') & (epa.model_mod.str.contains('new')), 'model_mod'].str.extract('new(.*)')
+		epa.loc[(epa.make == 'volkswagen') & (epa.model_mod.str.contains('new')), 'model_mod'].str.extract('new(.*)').values
 	# In EPA, change the model name to crosstour when the model name contains that string. 
 	epa.loc[(epa.make == 'honda') & (epa.model.str.contains('crosstour')), 'model_mod'] = 'crosstour'
 	# EPA has a separate model called accord wagon; in VIN, BodyClass identifies the wagons; 
@@ -661,7 +714,7 @@ def mod_models(vin, epa):
 	## All models with displacements in the model name, e.g. '190e 2.3-16'
 	def mod_models_w_displ(s):
 		pattern = re.compile(r'(.*)\d\.\d(.*)')
-		groups = re.match(pattern, s).groups()
+		groups = re.search(pattern, s).groups()
 		return groups[0].strip() or groups[1].strip()
 	## Lincoln.
 	### Replace 'zephyr' with 'mkz' for VIN for make 'lincoln'
@@ -680,25 +733,33 @@ def mod_models(vin, epa):
 	epa.loc[(epa.make == 'saturn') & (epa.model == 'l100/200') & (epa.year >= 2001), 'model_mod'] = 'ls1'
 	vin.loc[(vin.make == 'saturn') & (vin.model_mod != 'ls1'), 'model_mod'] = \
 		vin.loc[(vin.make == 'saturn') & (vin.model_mod != 'ls1'), 'model_mod'].apply(
-			lambda s: re.match(r'([^\d]+)[\d]', s).groups()[0] if re.match(r'([^\d]+)[\d]', s) else s)
+			lambda s: re.search(r'([^\d]+)[\d]', s).groups()[0] if re.search(r'([^\d]+)[\d]', s) else s)
 	## Mercedes. 
 	class_index = vin.loc[(vin.make == 'mercedes-benz') & (vin.model.str.contains(r'(?:\D+)-class'))].index
-	vin.loc[class_index, 'model_mod'] = vin.loc[class_index, 'model'].str.extract(r'(\D+)-class')
+	vin.loc[class_index, 'model_mod'] = vin.loc[class_index, 'model'].str.extract(r'(\D+)-class').values
 	digit_class_index = vin.loc[(vin.make == 'mercedes-benz') & (vin.model.str.contains(r'(?:\d+)'))].index
 	vin.loc[digit_class_index, 'model_mod'] = \
-		vin.loc[digit_class_index, 'Series'].str.split(' ').apply(lambda xs: xs[0]).str.extract(r'.*?(\D+)')
+		vin.loc[digit_class_index, 'Series'].str.split(' ').apply(lambda xs: xs[0]).str.extract(r'.*?(\D+)').values
+	vin.loc[(vin.make == 'mercedes-benz') & (vin.model_mod == 'm'), 'model_mod'] = 'ml'
+	### AMG models.
 	vin.loc[(vin.make == 'mercedes-benz'), 'model_mod'], epa.loc[(epa.make == 'mercedes-benz'), 'model_mod'] = \
 		[df.loc[(df.make == 'mercedes-benz'), 'model_mod'].str.replace('amg', '').str.strip() for df in (vin, epa)]
-	epa.loc[epa.make == 'mercedes-benz', 'model_mod'] = \
-		epa.loc[epa.make == 'mercedes-benz', 'model_mod'].str.split(' ').apply(
-			lambda xs: xs[0] if re.match(r'.*?\D', xs[0]) else xs[1]).str.extract(r'(\D+)')
-	vin.loc[(vin.make == 'mercedes-benz') & (vin.model_mod == 'm'), 'model_mod'] = 'ml'
+	### Get the models that start with numbers, e.g. 190 sl and 200sel, and keep only the numbers.
+	index = epa.loc[(epa.make == 'mercedes-benz') & (epa.model.str.contains(r'^\d+')), 'model_mod'].index
+	epa.loc[index, 'model_mod'] = epa.loc[index, 'model_mod'].str.extract(r'^(\d+)').values
+	### Get the models that start with letters, e.g. sl190 and sel 190, and keep only the letters.
+	index = epa.loc[(epa.make == 'mercedes-benz') & (epa.model.str.contains(r'^\D+')), 'model_mod'].index
+	epa.loc[index, 'model_mod'] = epa.loc[index, 'model_mod'].str.extract(r'^(\D+)').values
 	## Toyota. 
-	vin.loc[vin.model.str.contains('prius (?:c|v)'), 'model'] = \
-		vin.loc[vin.model.str.contains('prius (?:c|v)'), 'model'].apply(lambda s: s.replace(' ', ''))
-	epa.loc[epa.model.str.contains('prius (?:c|v)'), 'model'] = \
-		epa.loc[epa.model.str.contains('prius (?:c|v)'), 'model'].apply(lambda s: s.replace(' ', ''))
-	vin.loc[vin.make == 'scion', ['model', 'model_mod']] = \
+	### Prius Eco
+	vin.loc[(vin.VIN.apply(lambda s: s[3:8]) == 'karfu') & (vin.model_mod.str.contains('prius')), 'model_mod'] = 'priuseco'
+	epa.loc[epa.model.str.contains('prius plug-in'), 'model_mod'] = 'prius plug-in'
+	pattern = r'c|v|prime|plug-in|eco'
+	vin.loc[vin.model.str.contains(r'prius (?:{})'.format(pattern)), 'model_mod'] = \
+		vin.loc[vin.model.str.contains(r'prius (?:{})'.format(pattern)), 'model_mod'].apply(lambda s: s.replace(' ', ''))
+	epa.loc[epa.model.str.contains(r'prius (?:{})'.format(pattern)), 'model_mod'] = \
+		epa.loc[epa.model.str.contains(r'prius (?:{})'.format(pattern)), 'model_mod'].apply(lambda s: s.replace(' ', ''))
+	vin.loc[vin.make == 'scion', 'model_mod'] = \
 		vin.loc[vin.make == 'scion', 'model_mod'].apply(lambda x: x.split(' ')[1] if len(x.split(' '))>1 else x)
 	epa.loc[epa.model.str.contains('solara'), 'model_mod'] = 'solara'
 	vin.loc[vin.model.str.contains('4-runner'), 'model_mod'] = '4runner'
@@ -708,15 +769,15 @@ def mod_models(vin, epa):
 		'displ_mod'] = '2.4'
 	## Mazda.
 	def delete_mazda(s):
-		match = re.match('mazda(.*)', s)
+		match = re.search('mazda(.*)', s)
 		if match:
 			return match.groups()[0]
 		else:
 			return s
 	vin.loc[vin['make'] == 'mazda', 'model_mod'] = \
 		vin.loc[vin['make'] == 'mazda', 'model_mod'].apply(delete_mazda)
-	epa.loc[(epa.make == 'mazda') & (epa.model_mod.str.contains('^b\d')), 'model_mod'] = \
-		epa.loc[(epa.make == 'mazda') & (epa.model_mod.str.contains('^b\d')), 'model_mod'].apply(lambda x: x[0])
+	epa.loc[(epa.make == 'mazda') & (epa.model_mod.str.contains(r'^b\d')), 'model_mod'] = \
+		epa.loc[(epa.make == 'mazda') & (epa.model_mod.str.contains(r'^b\d')), 'model_mod'].apply(lambda x: x[0])
 	### Add displacement and cylinder where it's missing.
 	vin.loc[(vin['make'] == 'mazda') & vin.model.str.contains('626') & 
 		vin.VIN.apply(lambda x: x[7]).isin('c,e'.split(',')), 'displ_mod'] = 2.0
@@ -732,10 +793,10 @@ def mod_models(vin, epa):
 	### John Cooper Works. 
 	jcw_index = epa.loc[epa.model_mod.str.contains('john cooper works')].index
 	epa.loc[jcw_index, 'model_mod'] = \
-		epa.loc[jcw_index, 'model_mod'].str.extract('john cooper works(.*)').apply(lambda s: 'jcw'+s)
+		epa.loc[jcw_index, 'model_mod'].str.extract('john cooper works(.*)').apply(lambda s: 'jcw'+s).values
 	### Others. 
 	def take_out(s):
-		replace_list = 'gp-2, \\bgp\\b, coupe, kit, \(.*\), all4, \\b2\\b, \\b4\\b, door, hardtop'.split(', ')
+		replace_list = r'gp-2, \\bgp\\b, coupe, kit, \(.*\), all4, \\b2\\b, \\b4\\b, door, hardtop'.split(', ')
 		default_str = ''
 		replace_dict = OrderedDict(zip(replace_list, [default_str]*len(replace_list)))
 		for k, v in replace_dict.items(): 
@@ -751,13 +812,14 @@ def mod_models(vin, epa):
 			lambda s: s.replace(' ', '')) for df in (vin, epa)]
 	## Chevrolet.
 	### s10 models. 
-	epa.loc[(epa.make == 'chevrolet') & (epa.model.str.contains('(^|\s)blazer($|\s)')), 'model_mod'] = 'blazer'
-	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains('(^|\s)blazer($|\s)')), 'model_mod'] = 'blazer'
+	epa.loc[(epa.make == 'chevrolet') & (epa.model.str.contains(r'(^|\s)blazer($|\s)')), 'model_mod'] = 'blazer'
+	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains(r'(^|\s)blazer($|\s)')), 'model_mod'] = 'blazer'
 	epa.loc[(epa.make == 'chevrolet') & (epa.model.str.contains('suburban')), 'model_mod'] = 'suburban'
 	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains('suburban')), 'model_mod'] = 'suburban'
 	epa.loc[(epa.make == 'chevrolet') & (epa.model.str.contains('s10|s-10')), 'model_mod'] = 's'
 	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains('s10|s-10')), 'model_mod'] = 's'
 	### Geo Metro model. 
+	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains('geo prizm')), 'model_mod'] = 'prizm'
 	vin.loc[(vin.make == 'chevrolet') & (vin.model.str.contains('geo metro')), 'model_mod'] = 'metro'
 	### Replace gmt-400 with c when drive_mod = 2 and with k otherwise. 
 	vin.loc[(vin.make == 'chevrolet') & (vin.model == 'gmt-400') & (vin.drive_mod == 'two'), 'model_mod'] = 'c'
@@ -765,9 +827,9 @@ def mod_models(vin, epa):
 	### Replace '^\D\d' with the first letter. 
 	pattern = r'^(\D+)\s*\d+'
 	ind = epa.loc[(epa.make.isin(['chevrolet', 'dodge'])) & (epa.model_mod.str.contains(pattern)), 'model_mod'].index
-	epa.loc[ind, 'model_mod'] = epa.loc[ind, 'model_mod'].str.extract(pattern)
+	epa.loc[ind, 'model_mod'] = epa.loc[ind, 'model_mod'].str.extract(pattern).values
 	ind = vin.loc[(vin.make.isin(['chevrolet', 'dodge'])) & (vin.model_mod.str.contains(pattern)), 'model_mod'].index
-	vin.loc[ind, 'model_mod'] = vin.loc[ind, 'model_mod'].str.extract(pattern)
+	vin.loc[ind, 'model_mod'] = vin.loc[ind, 'model_mod'].str.extract(pattern).values
 
 	# Keep only first word of the model. 
 	epa['model_mod'], vin['model_mod'] = [
@@ -788,6 +850,7 @@ def modify(vin_original, epa_original):
 
 	# Make the counts integers. 
 	vin['counts'] = vin['counts'].astype(int)
+	vin.loc[vin.counts <= 0, 'counts'] = 1
 
 	# Modify transmission information
 	## In vin DB: turn transmission speeds into integers then strings.
@@ -829,9 +892,14 @@ def modify(vin_original, epa_original):
 	epa['vtyp3'] = u'-1'
 	epa.loc[epa.VClass.str.contains('pickup') & epa.model.str.contains('15|10'), 'vtyp3'] = u'3'
 	epa.loc[epa.VClass.str.contains('pickup') & epa.model.str.contains('25|35'), 'vtyp3'] = u'4'
-
+	
 	# Add weight variable. 
-	vin['weight'] = vin.GVWR.str.extract('([\d,]*) lb').fillna('0').apply(lambda s: int(s.replace(',', '')))
+	weight_df = vin.GVWR.str.extract(r'([\d,]*) lb').fillna('0')
+	if pd.__version__ <= u'0.22.0':
+		weight_series = weight_df
+	else:
+		weight_series = weight_df[0]
+	vin['weight'] = weight_series.str.replace(',', '').astype(int)
 
 	# Drop heavy vehicles. 
 	weight_limit = 9000
@@ -849,6 +917,40 @@ def modify(vin_original, epa_original):
 	vin.type = pd.Series(
 		[type_from_vin if type_from_vin else v_type for (v_type, type_from_vin) in zip(vin.type, vin.type_from_vin)]
 		)
+
+	# Make some more changes based on Tom's SAS code. 
+
+	# Add vtyp for epa. 
+	epa.loc[epa.VClass.str.contains('seaters|cars|wagons'), 'vtyp'] = 'car'
+	epa.loc[epa.VClass.str.contains('small pickup'), 'vtyp'] = 'lt1'
+	epa.loc[epa.VClass.str.contains('standard pickup'), 'vtyp'] = 'lt2'
+	epa.loc[epa.VClass.str.contains('utility'), 'vtyp'] = 'suv'
+	epa.loc[epa.VClass.str.contains('minivan'), 'vtyp'] = 'min'
+	epa.loc[epa.VClass.str.contains('vans'), 'vtyp'] = 'van'
+	epa.loc[epa.VClass.str.contains('purpose'), 'vtyp'] = 'pur'
+
+	model_str = 'pt|hhr|escape|pacifica|equinox|vue|santa|magnum|edge|captiva|trax|ecosport|rav4|highlander|'\
+	'rendezvous|freestyle|srx|flex|mkx|mkc|mkt|xt5|mariner|enclave|compass|traverse|torrent|aztek|acadia|terrain|'\
+	'patriot|encore|envision|outlook|tiguan|touareg|allroad|q3|q5|q7|x6|x3|x5|rogue|cube|juke|murano|crosstour|x|'\
+	'pilot|element|tribute|r350|r500|gl320|gl420|glk350|cayenne|94x|freelander|baja|forester|b9|venza|xc70|xc40|'\
+	'xl7|zdx|rdx|mdx|tucson|sportage|veracruz|modelx|journey|sq5|'\
+	'xc60|xc90|outlander|endeavor|outback|mdx|cx3|cx4|cx5|cx7|cx9'
+
+	vin.loc[(vin.model_mod.str.contains(model_str)) | ((2004 <= vin.year) & (vin.year < 2008) & (vin.model_mod == 'pacifica')) |
+	((vin.make == 'honda') & (vin.model_mod.str.contains('cr')) & (vin.VIN.apply(lambda s: s[0:3] != 'jhm'))) |
+	((vin.make =='honda') & (vin.model_mod == 'hr')) | ((vin.make == 'bmw') & (vin.model_mod == 'x')) |
+	((vin.make =='mercedes-benz') & (vin.model_mod == 'r')) | ((vin.make == 'infiniti') & 
+		(vin.model_mod.apply(lambda s: s[0:2]).str.contains(r'^ex$|^fx$|^jx$|^qx$'))) | 
+	((vin.make == 'lexus') & vin.model_mod.str.contains(r'^nx$|^rx$')) | ((2010 <= vin.year) & (vin.model_mod == 'sorento')) |
+	((vin.year >= 2006 ) & (vin.model_mod == 'ml')) | ((vin.model_mod >= 2019) & (vin.model_mod == 'blazer')) |
+	((vin.year >= 2011) & (vin.model_mod == 'explorer')) | ((vin.year >= 2014) & (vin.model_mod == 'cherokee')) |
+	(((1996 <= vin.year) & (vin.year <= 2004)) | (vin.year >= 2013) & (vin.model_mod == 'pathfinder')), 'vtyp'] = 'cuv'
+
+	# Divide epa purpose vehicles into minivans and suvs;
+	epa['vtyp2'] = epa['vtyp']
+	epa.loc[epa.vtyp == 'pur', 'vtyp2'] = 'suv'
+	epa.loc[(epa.vtyp == 'pur') & (epa.model_mod.isin(('grandcaravan','grandvoyager','quest','sienna','silhouette',\
+		'townandcountry','venture','villager','voyager','windstar'))), 'vtyp2'] = 'min'
 
 	# Reset index.
 	vin = vin.reset_index(drop=True)
@@ -876,10 +978,10 @@ def merge(vin, epa, n_var_left=4, keep_epa_models=False, no_engine_restriction=T
 		]
 
 	compulsory_cols = [
-		'type'
 		]
 
 	missing_val_cols = [
+		'type',
 		'drive_mod',
 		'displ_mod',
 		'cylinders',
@@ -900,10 +1002,10 @@ def merge(vin, epa, n_var_left=4, keep_epa_models=False, no_engine_restriction=T
 	for cols in col_list:
 		print('*'*50)
 		print('Merging using:', cols)
-		for col_list in match_col_list:
+		for match_cols in match_col_list:
 			# We want at least one piece of info about the engine size to be considered in the merge. 
-			if (set(col_list) & set(at_least_one_of)) or no_engine_restriction:
-				on_cols = cols + col_list
+			if (set(match_cols) & set(at_least_one_of)) or no_engine_restriction:
+				on_cols = cols + match_cols
 				print('Matching on ', on_cols)
 				remaining_vins = vin.loc[~vin.VIN_ID.isin(matched_vins.VIN_ID)]
 				# Make sure we don't match on the missing values. 
@@ -1024,7 +1126,7 @@ def gen_missing_mpgs(vin, epa, ignore_vins):
 	heavy_vins = vin.loc[vin.VIN.isin(ignore_vins)]
 	heavy_mpgs = pd.merge(heavy_vins, epa, on='make, model'.split(', ')).drop_duplicates(subset='VIN')
 
-	keep_cols = [x for x in epa.columns if re.match('.*08.*', x)]
+	keep_cols = [x for x in epa.columns if re.search('.*08.*', x)]
 	on_vars = 'type, year, vtyp3'.split(', ')
 	min_lookup = epa.groupby(on_vars)[keep_cols].min().reset_index()
 
@@ -1113,19 +1215,21 @@ def create_plots():
 	ax.legend()
 	plt.show()
 
-def merge_and_output(vin, epa, export=False, export_all=False):	
+def run_merge(vin, epa):	
 	####################################################################################################################
 	# Merge datasets. 
 	####################################################################################################################
 	print('Merging datasets')
 	for var in 'year'.split(', '):
 		vin[var], epa[var] = vin[var].astype(str), epa[var].astype(str)		
-	matched_vins, vin = merge(vin, epa, n_var_left=4, keep_epa_models=True)
+	matched_vins, vin = merge(vin, epa, n_var_left=4, keep_epa_models=True, no_engine_restriction=False)
+	return matched_vins, vin
 
+def output(vin, epa, matched_vins, export=False, export_all=False):
 	####################################################################################################################
 	# Post-process datasets. 
 	####################################################################################################################
-	matched_vins_ids = matched_vins[['VIN_ID', 'EPA_ID', 'matched_on']]
+	matched_vins_ids = matched_vins[['VIN_ID', 'EPA_ID', 'matched_on']].applymap(try_int)
 	# Rename columns so the result of the merge is more comprehensible. 
 	vin_vin = vin.rename(columns = dict(zip(vin.columns, vin.columns + '_vin')))
 	epa_epa = epa.rename(columns = dict(zip(epa.columns, epa.columns + '_epa')))
@@ -1230,6 +1334,7 @@ def merge_and_output(vin, epa, export=False, export_all=False):
 				'fuelType1_mod_epa',
 				'fuelType1_vin',
 				'fuelType1_mod_vin',
+				'fuelType2_vin',
 				'drive_epa',
 				'drive_mod_epa',
 				'drive_vin',
@@ -1267,7 +1372,8 @@ def merge_and_output(vin, epa, export=False, export_all=False):
 				'highway08_epa',
 				'VClass_epa',
 				'trany_epa',
-
+				'BodyCabType_vin',
+				'Doors_vin'
 				]
 			# Create csv files. 
 			all_records[ordered_cols].to_csv(r'X:\EPA_MPG\all_records.csv', encoding = 'utf8')
