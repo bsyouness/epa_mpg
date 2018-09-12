@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-from __future__ import division
+
 import re
-import csv, codecs, cStringIO
+import csv, codecs, io
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -32,13 +32,13 @@ class UnicodeWriter:
 
     def __init__(self, f, dialect=csv.excel, encoding="utf-8", **kwds):
         # Redirect output to a queue
-        self.queue = cStringIO.StringIO()
+        self.queue = io.StringIO()
         self.writer = csv.writer(self.queue, dialect=dialect, **kwds)
         self.stream = f
         self.encoder = codecs.getincrementalencoder(encoding)()
 
     def writerow(self, row):
-        self.writer.writerow([s.encode("utf-8") if type(s) == unicode
+        self.writer.writerow([s.encode("utf-8") if type(s) == str
             else s for s in row])
         # Fetch UTF-8 output from the queue ...
         data = self.queue.getvalue()
@@ -60,7 +60,7 @@ def unicode_csv_reader(unicode_csv_data, dialect=csv.excel, **kwargs):
                             dialect=dialect, **kwargs)
     for row in csv_reader:
         # decode UTF-8 back to Unicode, cell by cell:
-        yield [unicode(cell, 'utf-8') for cell in row]
+        yield [str(cell, 'utf-8') for cell in row]
 
 def utf_8_encoder(unicode_csv_data):
     for line in unicode_csv_data:
@@ -126,9 +126,9 @@ def get_data_parallel_stream(vin_list, vin_file_path=r'X:\EPA_MPG\data\out_paral
     n = len(vin_list)
     with open(vin_file_path, 'w+b') as f:
         wr = UnicodeWriter(f, quoting=csv.QUOTE_ALL)
-        wr.writerow(get_json(vin_list[0]).keys())
+        wr.writerow(list(get_json(vin_list[0]).keys()))
         for i, js in enumerate(p.imap_unordered(get_json, vin_list), 1):
-            wr.writerow(js.values())
+            wr.writerow(list(js.values()))
             sys.stderr.write('\rDone {:.3%}'.format(i/n))
 
 def take_out_results_string(file_path):
@@ -175,7 +175,7 @@ def fix_vin_output_file(vin_file_path):
     Returns:
         TYPE: Description
     """
-    vin_df = pd.read_csv(vin_file_path, dtype=unicode, encoding='utf8')
+    vin_df = pd.read_csv(vin_file_path, dtype=str, encoding='utf8')
     vin_df.columns = fix_column_names(vin_df)
     # create a session
     Session = sessionmaker(bind=vp.engine)
@@ -199,16 +199,16 @@ def get_counts(put_in_db=True, file_path=None, file_name='txsafe18', if_exists='
             return ''.join(s.split(',')[position].split())
         except:
             return 0
-    vins = map(lambda x: parse(x, 0), vin_lines)
-    counts = map(lambda x: parse(x, 3), vin_lines)
-    counts_with_vins = pd.DataFrame(zip(vins, counts), columns=['VIN', 'counts'])
+    vins = [parse(x, 0) for x in vin_lines]
+    counts = [parse(x, 3) for x in vin_lines]
+    counts_with_vins = pd.DataFrame(list(zip(vins, counts)), columns=['VIN', 'counts'])
     if put_in_db:
         to_sql(pd.Series(vins), 'just_vins', if_exists=if_exists)
         to_sql(counts_with_vins, 'counts_with_vins')
     return counts_with_vins
 
 def add_vtyp(vin_file_path, vtyp_file_path=r"X:\EPA_MPG\data\vtyp_no_dupes.csv", if_exists='append'):
-    vin_df = pd.read_csv(vin_file_path, dtype=unicode, encoding='utf8')
+    vin_df = pd.read_csv(vin_file_path, dtype=str, encoding='utf8')
     # Get rid of rows with errors. 
     vin_df.dropna(subset=['VIN'], inplace=True)
     vin_df['vin8'] = vin_df['VIN'].apply(lambda s: s[:8])
@@ -233,7 +233,7 @@ def process_vtyp(vtyp_file_path):
     Returns:
         pd.DataFrame
     """
-    vtyp_df = pd.read_csv(vtyp_file_path, dtype=unicode, encoding='utf8')
+    vtyp_df = pd.read_csv(vtyp_file_path, dtype=str, encoding='utf8')
     vtyp_df['vin8'] = vtyp_df['VIN'].apply(lambda s: s[:8])
     vtyp_df['vin1012'] = vtyp_df['VIN'].apply(lambda s: s[9:12])
     vtyp_df.drop(columns=['VIN'], inplace=True)
@@ -242,7 +242,7 @@ def process_vtyp(vtyp_file_path):
     return vtyp_df
 
 def load_epa_data(epa_file_path):
-    epa_df = pd.read_csv(epa_file_path, dtype=unicode, encoding='utf8')
+    epa_df = pd.read_csv(epa_file_path, dtype=str, encoding='utf8')
     to_sql(epa_df, 'raw_epa_data')
 
 def get_vin_data():
@@ -251,7 +251,7 @@ def get_vin_data():
     t0 = datetime.now()
     get_data_parallel_stream(vin_list)
     t1 = datetime.now()
-    print '\nParallel runtime: {:.3}'.format(t1-t0)
+    print('\nParallel runtime: {:.3}'.format(t1-t0))
 
 def add_counts():
     vin_df = pd.read_sql('vin_with_vtyp_no_counts', engine)
@@ -281,9 +281,9 @@ def add_vins_not_read():
     upper_not_read_cols = [col.upper() for col in not_read_df_with_vtyp.columns]
     missing_cols = set(upper_not_read_cols) - set(upper_vin_cols) 
     added_cols = set(upper_vin_cols) - set(upper_not_read_cols)
-    vin_mapping = dict(zip(upper_vin_cols, vin_df.columns))
-    not_read_mapping = dict(zip(not_read_df_with_vtyp.columns, upper_not_read_cols))
-    col_mapping = dict((k, vin_mapping.setdefault(v, k)) for (k, v) in not_read_mapping.items())
+    vin_mapping = dict(list(zip(upper_vin_cols, vin_df.columns)))
+    not_read_mapping = dict(list(zip(not_read_df_with_vtyp.columns, upper_not_read_cols)))
+    col_mapping = dict((k, vin_mapping.setdefault(v, k)) for (k, v) in list(not_read_mapping.items()))
 
     not_read_df_with_vtyp.rename(columns=col_mapping, inplace=True)
     new_vin_df = pd.concat([vin_df, not_read_df_with_vtyp], axis=0)
