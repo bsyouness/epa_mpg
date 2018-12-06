@@ -1,5 +1,7 @@
 # Merging EPA MPG Data with vPIC VIN Data
 
+To run the code, use the Jupyter notebook `vin_processing.ipynb`.
+
 ## I. Load and Fix. 
 
 1. Load `vin` and `epa` datasets from files:
