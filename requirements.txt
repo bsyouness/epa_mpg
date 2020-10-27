@@ -16,7 +16,7 @@ colorama==0.3.9
 comtypes==1.1.7
 configparser==3.5.0
 constantly==15.1.0
-cryptography==2.3.1
+cryptography==3.2
 decorator==4.3.0
 -e git+git@bitbucket.org:eetd-ees/eetd-ees.git@294982f4d0376a60133c0db48a962871085d7dca#egg=ees
 entrypoints==0.2.3
